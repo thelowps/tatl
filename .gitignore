@@ -1,0 +1,9 @@
+#Ignore any object files we may add accidentally
+*.o
+
+#Ignore the test excecutable
+test_tatl
+
+#Ignore emacs backup files
+*~
+#*#

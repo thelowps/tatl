@@ -62,7 +62,7 @@ int tatl_login (const char* username) {
 
   tatl_send(LOGIN, username, strlen(username));
   MESSAGE_TYPE type;
-  int* confirmation;
+  int* confirmation = NULL;
   tatl_receive(&type, confirmation);
   int conf = *confirmation;
   tatl_free(confirmation);

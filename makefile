@@ -1,16 +1,14 @@
-all: test_tatl
+main=test_tatl
+CC=gcc
+OBJ=$(main).o tatl.o eztcp.o
+DEPS=tatl.h eztcp.h
+CFLAGS=-lpthread -Wall
 
-test_tatl: test_tatl.o tatl.o eztcp.o
-	gcc test_tatl.o tatl.o eztcp.o -o test_tatl
+$(main): $(main).o $(OBJ)
+	 $(CC) -o $@ $^ $(CFLAGS)
 
-test_tatl.o: test_tatl.c
-	gcc -c test_tatl.c
-
-tatl.o: tatl.c
-	gcc -c tatl.c
-
-eztcp.o: eztcp.c
-	gcc -c eztcp.c
+%.o: %.c $(DEPS)
+	$(CC) -c $< $(CFLAGS)
 
 clean:
-	rm -rf test_tatl *.o
+	rm -rf $(main) $(OBJ)

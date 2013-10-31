@@ -9,9 +9,11 @@
  *
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "eztcp.h"
 
@@ -25,7 +27,7 @@ void ezsetprinterror (int p) {
 
 int ezconnect (int* sock, const char* ip, int port) {
   int s, err;
-  struct sockaddr_in servaddr,cliaddr;
+  struct sockaddr_in servaddr;
   
   // OPEN SOCKET
   if ((s = socket(AF_INET,SOCK_STREAM,0)) < 0) {
@@ -39,7 +41,7 @@ int ezconnect (int* sock, const char* ip, int port) {
   servaddr.sin_port = htons(port);
 
   // CONNECT
-  if (err = connect(s, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+  if ((err = connect(s, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when connecting");
     return err;
   }
@@ -58,7 +60,8 @@ int ezsend (int sock, const void* data, int len) {
 }
 
 int ezreceive (int sock, void* data, int len) {
-  int n, socklen = (sizeof(struct sockaddr_in));
+  int n;
+  socklen_t socklen = (sizeof(struct sockaddr_in));
   if ((n = recvfrom(sock, data, len, 0, NULL, &socklen)) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when receiving data");
   } 
@@ -66,7 +69,7 @@ int ezreceive (int sock, void* data, int len) {
 }
 	       
 int ezlisten (int* sock, int port) {
-  int listenfd, connfd, err;
+  int listenfd, err;
   struct sockaddr_in servaddr;
   
   if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {

@@ -18,5 +18,6 @@ int tatl_login (const char* username);
 
 // SERVER
 int tatl_init_server (int port, int flags);
+int tatl_run_server ();
 
 #endif

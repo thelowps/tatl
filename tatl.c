@@ -12,6 +12,7 @@
 #include "string.h"
 #include "pthread.h"
 #include "eztcp.h"
+#include "basic_map.h"
 
 // GLOBALS
 enum {
@@ -36,7 +37,10 @@ typedef enum {
 int TATL_SOCK;
 int TATL_USE_AUTHENTICATION = 1;
 
-// COMMON FUNCTIONS
+struct basic_map* USER_MAP = NULL;
+struct basic_map* ROOM_MAP = NULL;
+
+// COMMON FUNCTIONS //
 int tatl_send (MESSAGE_TYPE message_type, const void* message, int size) {
   ezsend(TATL_SOCK, &message_type, sizeof(int));
   ezsend(TATL_SOCK, &size, sizeof(int));
@@ -100,6 +104,9 @@ int tatl_init_server (int port, int flags) {
   }
   TATL_MODE = SERVER;
 
+  USER_MAP = bm_create_map(0);
+  ROOM_MAP = bm_create_map(0);
+
   ezlisten(&TATL_SOCK, port);
   return 0;
 }
@@ -111,9 +118,9 @@ int tatl_run_server () {
   }
   
   pthread_t thread;
-  int conn = NULL;
+  int conn = 0;
   while (1) {
-    if (ezaccept(TATL_SOCK, &conn) < 0) {
+    if ((conn = ezaccept(TATL_SOCK)) < 0) {
       return -1;
     }
     pthread_create(&thread, NULL, tatl_handle_client, &conn); 
@@ -123,18 +130,24 @@ int tatl_run_server () {
 }
 
 void* tatl_handle_client (void* arg) {
-  int conn = *arg;
-  
-  int conf = 1;
+  MESSAGE_TYPE type;
+  char* message;
+  int message_size;
+
+  // Receive a username
+  message_size = tatl_receive(&type, message);
+  bm_insert(USER_MAP, message, "on", 2);
+  printf("%s has logged on.", message);
+
+  // Send a login confirmation
   tatl_send(CONFIRMATION, NULL, 0);
 
-  MESSAGE_TYPE type;
-  void* message;
-  int message_size;
   while (1) {
-    tatl_receive(&type, &message, &message_size);
+    message_size = tatl_receive(&type, &message);
+
     switch (type) {
     case CREATE_ROOM_REQUEST:
+      //bm_insert(ROOM_MAP, 
       break;
 
     case ENTER_ROOM_REQUEST:

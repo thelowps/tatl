@@ -1,6 +1,6 @@
 main=test_tatl
 CC=gcc
-OBJ=$(main).o tatl.o eztcp.o basic_map.o
+OBJ=$(main).o tatl.o eztcp.o sassyhash.o linked.o
 DEPS=tatl.h eztcp.h
 CFLAGS=-lpthread -Wall
 

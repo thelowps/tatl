@@ -12,7 +12,7 @@
 #include "string.h"
 #include "pthread.h"
 #include "eztcp.h"
-#include "basic_map.h"
+#include "sassyhash.h"
 
 // GLOBALS
 enum {
@@ -104,8 +104,8 @@ int tatl_init_server (int port, int flags) {
   }
   TATL_MODE = SERVER;
 
-  USER_MAP = bm_create_map(0);
-  ROOM_MAP = bm_create_map(0);
+  USER_MAP = sh_create_map(0);
+  ROOM_MAP = sh_create_map(0);
 
   ezlisten(&TATL_SOCK, port);
   return 0;
@@ -136,7 +136,7 @@ void* tatl_handle_client (void* arg) {
 
   // Receive a username
   message_size = tatl_receive(&type, message);
-  bm_insert(USER_MAP, message, "on", 2);
+  sh_insert(USER_MAP, message, "on", 2);
   printf("%s has logged on.", message);
 
   // Send a login confirmation
@@ -147,7 +147,7 @@ void* tatl_handle_client (void* arg) {
 
     switch (type) {
     case CREATE_ROOM_REQUEST:
-      //bm_insert(ROOM_MAP, 
+      //sh_insert(ROOM_MAP, 
       break;
 
     case ENTER_ROOM_REQUEST:

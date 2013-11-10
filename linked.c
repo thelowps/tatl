@@ -17,10 +17,19 @@
 // Changes 'head' to point to the new node inserted (aka the new head of the list)
 void ll_insert_node (struct node** head, const char* key, void* value, int value_size) {
   struct node* new_node = malloc(sizeof(struct node));
-  new_node->key = key;
-  void* cpy = malloc(value_size);
-  memcpy(cpy, value, value_size);
-  new_node->value = cpy;
+
+  // Dynamically handle a copy of the key
+  char* keycpy = malloc(sizeof(char)*strlen(key) + 1);
+  strcpy(keycpy, key);
+  new_node->key = keycpy;
+
+  // Dynamically handle a copy of the value
+  void* valcpy = malloc(value_size+1); // Just as a precaution. I'd rather insert an extra null byte
+  memset(valcpy, 0, value_size+1);     // than struggle with non null-terminated strings that I forget about
+  memcpy(valcpy, value, value_size);
+  new_node->value = valcpy;
+
+  // Place the new node in the list
   new_node->prev = NULL;
   new_node->next = *head;
   if (*head) (*head)->prev = new_node;
@@ -40,6 +49,7 @@ int ll_delete_key (struct node** head, const char* key) {
     return 0;
   }
 
+  // If the key is at the head, we need to update the head pointer before deleting
   if (to_delete == *head) {
     *head = (*head)->next;
   }
@@ -54,6 +64,7 @@ int ll_delete_key (struct node** head, const char* key) {
 //
 // Deletes the given node of a linked list
 void ll_delete_node (struct node* to_delete) {
+  // Clear neighboring connections
   if (to_delete->prev) {
     to_delete->prev->next = to_delete->next;
   }
@@ -62,6 +73,7 @@ void ll_delete_node (struct node* to_delete) {
     to_delete->next->prev = to_delete->prev;
   }
 
+  free(to_delete->key);
   free(to_delete->value);
   free(to_delete);
 }

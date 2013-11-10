@@ -13,9 +13,13 @@
 #define SASSY_HASH_DEFAULT_SIZE 100
 const int PRIMES [26] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101};
 
-//////////////////////////
-// HASH TABLE UTILITIES //
-//////////////////////////
+struct node;
+struct shash {
+  int _VALUE_SIZE;
+  int _SIZE;
+  struct node** _TABLE;
+  int (*CALCULATE_HASH) (struct shash* map, const char* key);
+};
 
 //
 // sh_calculate_hash
@@ -23,7 +27,8 @@ const int PRIMES [26] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71
 // Calculates the hash for the given key.
 // RETURNS: the calculated hash
 int sh_calculate_hash (struct shash* map, const char* key) {
-  long long sig = 1;
+  // Damn, this is one shitty hash.
+  long long unsigned sig = 1;
   int i = 0;
   for (; i < strlen(key); ++i) {
     sig *= PRIMES[(*key)%26];
@@ -124,7 +129,7 @@ int sh_get (struct shash* map, const char* key, void** value) {
 //
 // Prints the map's contents to standard output
 // If full != 0, then the buckets will be shown too
-void sh_print (struct shash* map, int full) {
+void sh_print (struct shash* map, int full, void (*print)(void* value, char* str)) {
   int i;
   char ll [99999];
 
@@ -134,7 +139,7 @@ void sh_print (struct shash* map, int full) {
 
   int prev = 0;
   for (i = 0; i < map->_SIZE; ++i) {
-    ll_to_str(map->_TABLE[i], ll, NULL);
+    ll_to_str(map->_TABLE[i], ll, print);
     if (!strlen(ll)) continue;
 
     if (!full) {

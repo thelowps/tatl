@@ -8,6 +8,7 @@
 
 #include "tatl.h"
 
+#include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "pthread.h"
@@ -37,24 +38,39 @@ typedef enum {
 int TATL_SOCK;
 int TATL_USE_AUTHENTICATION = 1;
 
-struct basic_map* USER_MAP = NULL;
-struct basic_map* ROOM_MAP = NULL;
+#define MAX_USERNAME_SIZE 100
+#define MAX_ROOMNAME_SIZE 100
+
+typedef struct {
+  char name [MAX_USERNAME_SIZE];
+  char room [MAX_ROOMNAME_SIZE];
+  int socket;
+} userdata;
+
+shash_t USER_MAP = NULL;
+shash_t ROOM_MAP = NULL;
+
+// DEBUGGING //
+void tatl_print_userdata (void* value, char* str) {
+  userdata* data = (userdata*)value;
+  sprintf(str, "{Name=%s : Room=%s : Socket=%d", data->name, data->room, data->socket);
+}
 
 // COMMON FUNCTIONS //
-int tatl_send (MESSAGE_TYPE message_type, const void* message, int size) {
-  ezsend(TATL_SOCK, &message_type, sizeof(int));
-  ezsend(TATL_SOCK, &size, sizeof(int));
-  if (size > 0) ezsend(TATL_SOCK, message, size);
+int tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size) {
+  ezsend(socket, &message_type, sizeof(int));
+  ezsend(socket, &size, sizeof(int));
+  if (size > 0) ezsend(socket, message, size);
   return 0;
 }
 
-int tatl_receive (MESSAGE_TYPE* message_type, void* message) {
+int tatl_receive (int socket, MESSAGE_TYPE* message_type, void* message) {
   int message_size = 0;
-  ezreceive(TATL_SOCK, &message_type, sizeof(int));
-  ezreceive(TATL_SOCK, &message_size, sizeof(int));
+  ezreceive(socket, &message_type, sizeof(int));
+  ezreceive(socket, &message_size, sizeof(int));
   if (message_size > 0) {
     message = malloc(message_size);
-    ezreceive(TATL_SOCK, message, message_size);
+    ezreceive(socket, message, message_size);
   }
   return message_size;
 }
@@ -85,9 +101,9 @@ int tatl_login (const char* username) {
     return -1;
   }
 
-  tatl_send(LOGIN, username, strlen(username));
+  tatl_send(TATL_SOCK, LOGIN, username, strlen(username));
   MESSAGE_TYPE type = DENIAL;
-  tatl_receive(&type, NULL);
+  tatl_receive(TATL_SOCK, &type, NULL);
 
   if (type == CONFIRMATION) {
     return 0;
@@ -129,21 +145,34 @@ int tatl_run_server () {
   return 0;
 }
 
+userdata tatl_create_userdata (const char* username, int socket) {
+  userdata new_user;
+  strncpy(new_user.name, username, MAX_USERNAME_SIZE);
+  strncpy("", new_user.room, MAX_ROOMNAME_SIZE);
+  new_user.socket = socket;
+  return new_user;
+}
+
 void* tatl_handle_client (void* arg) {
+  int socket = *((int*)arg);
+  
   MESSAGE_TYPE type;
   char* message;
   int message_size;
-
+  
   // Receive a username
-  message_size = tatl_receive(&type, message);
-  sh_insert(USER_MAP, message, "on", 2);
+  message_size = tatl_receive(socket, &type, message);
+  userdata new_userdata = tatl_create_userdata(message, socket);
+  sh_insert(USER_MAP, message, &new_userdata, sizeof(userdata));
   printf("%s has logged on.", message);
-
+  printf("user map is: \n");
+  sh_print(USER_MAP, 0, tatl_print_userdata);
+  
   // Send a login confirmation
-  tatl_send(CONFIRMATION, NULL, 0);
-
+  tatl_send(socket, CONFIRMATION, NULL, 0);
+  
   while (1) {
-    message_size = tatl_receive(&type, &message);
+    message_size = tatl_receive(socket, &type, &message);
 
     switch (type) {
     case CREATE_ROOM_REQUEST:

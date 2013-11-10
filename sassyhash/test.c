@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 void int_to_str (void* value, char* str) {
-  sprintf(str, "||=~-- %d --~=||", *((int*)value));
+  sprintf(str, "%d", *((int*)value));
 }
 
 int main (int argc, char* argv[]) {
@@ -25,7 +25,7 @@ int main (int argc, char* argv[]) {
   printf("%s\n\n", str);
 
   struct shash* map1 = sh_create_map(0);
-  struct shash* map2 = sh_create_map(10);
+  struct shash* map2 = sh_create_map(0);
   
   char* v = "my value!";
   sh_insert(map1, "dlopes", v, strlen(v));
@@ -34,11 +34,24 @@ int main (int argc, char* argv[]) {
   sh_insert(map1, "dlopes", v, strlen(v));
   sh_insert(map1, "hiya", v, strlen(v));
 
-  sh_print(map1, 1);
+  sh_print(map1, 1, NULL);
 
   printf("dlopes exists: %s\n", sh_exists(map1, "dlopes") ? "yes" : "no");
   printf("dipshit exists: %s\n", sh_exists(map1, "dipshit") ? "yes" : "no");
   printf("jcobian exists: %s\n", sh_exists(map1, "jcobian") ? "yes" : "no");
 
+  char word [10] = "aaaaaaaa";
+  int j;
+  for (i = 0; i < 8; ++i) {
+    for (j = 0; j < 20; ++j) {
+      word[i] = 'a'+j;
+      sh_insert(map2, word, &j, sizeof(int));
+      //sh_print(map2, 1, int_to_str);
+    }
+  }
+  
+  printf("map 2\n\n");
+  sh_print(map2, 1, int_to_str);
+  
   return 0;
 }

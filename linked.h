@@ -9,7 +9,7 @@
  */
 
 struct node {
-  const char* key;
+  char* key;
   void* value;
   struct node* next;
   struct node* prev;

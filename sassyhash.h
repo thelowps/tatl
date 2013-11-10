@@ -23,26 +23,22 @@
  *
  */
 
-struct node;
-struct basic_map {
-  int _SIZE;
-  struct node** _TABLE;
-  int (*CALCULATE_HASH) (struct basic_map* map, const char* key);
-};
+struct shash;
+typedef struct shash* shash_t;
 
 // Create and delete a map
-struct basic_map* bm_create_map (int size);
-void bm_delete_map ();
+shash_t sh_create_map (int size);
+void sh_delete_map ();
 
 // Insert and remove from a map
-int  bm_insert (struct basic_map* map, const char* key, void* value, int value_size);
-int  bm_remove (struct basic_map* map, const char* key);
+int  sh_insert (shash_t map, const char* key, void* value, int value_size);
+int  sh_remove (shash_t map, const char* key);
 
 // View contents of a map
-int  bm_exists (struct basic_map* map, const char* key);
-int  bm_get    (struct basic_map* map, const char* key, void** value);
+int  sh_exists (shash_t map, const char* key);
+int  sh_get    (shash_t map, const char* key, void** value);
 
 // Debugging. Set full=1 to visualize the buckets
-void bm_print  (struct basic_map* map, int full);
+void sh_print  (shash_t map, int full, void (*print)(void* value, char* str));
 
 #endif

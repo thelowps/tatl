@@ -15,6 +15,7 @@
 // CLIENT
 int tatl_init_client (const char* server_ip, int server_port, int flags);
 int tatl_login (const char* username);
+int tatl_create_room (const char* roomname);
 
 // SERVER
 int tatl_init_server (int port, int flags);

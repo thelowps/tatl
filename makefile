@@ -1,14 +1,18 @@
-main=test_tatl
 CC=gcc
-OBJ=$(main).o tatl.o eztcp.o sassyhash.o linked.o
+OBJ=tatl.o eztcp.o sassyhash.o linked.o
 DEPS=tatl.h eztcp.h
 CFLAGS=-lpthread -Wall
 
-$(main): $(main).o $(OBJ)
+all: client server
+
+client: client.o $(OBJ)
+	 $(CC) -o $@ $^ $(CFLAGS)
+
+server: server.o $(OBJ)
 	 $(CC) -o $@ $^ $(CFLAGS)
 
 %.o: %.c $(DEPS)
 	$(CC) -c $< $(CFLAGS)
 
 clean:
-	rm -rf $(main) $(OBJ)
+	rm -rf $(OBJ) client.o server.o client server

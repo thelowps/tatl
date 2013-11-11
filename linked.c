@@ -28,6 +28,7 @@ void ll_insert_node (struct node** head, const char* key, void* value, int value
   memset(valcpy, 0, value_size+1);     // than struggle with non null-terminated strings that I forget about
   memcpy(valcpy, value, value_size);
   new_node->value = valcpy;
+  new_node->value_size = value_size;
 
   // Place the new node in the list
   new_node->prev = NULL;

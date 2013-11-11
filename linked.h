@@ -11,6 +11,7 @@
 struct node {
   char* key;
   void* value;
+  int value_size;
   struct node* next;
   struct node* prev;
 };

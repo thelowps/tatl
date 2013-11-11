@@ -102,7 +102,7 @@ int tatl_login (const char* username) {
     return -1;
   }
 
-  tatl_send(TATL_SOCK, LOGIN, username, strlen(username));
+  tatl_send(TATL_SOCK, LOGIN, username, strlen(username)+1);
   MESSAGE_TYPE type = DENIAL;
   tatl_receive(TATL_SOCK, &type, NULL, 0);
 
@@ -124,7 +124,7 @@ int tatl_create_room (const char* roomname) {
   }
 
   printf("requesting room %s\n", roomname);
-  tatl_send(TATL_SOCK, CREATE_ROOM_REQUEST, roomname, strlen(roomname));
+  tatl_send(TATL_SOCK, CREATE_ROOM_REQUEST, roomname, strlen(roomname)+1);
   MESSAGE_TYPE type = DENIAL;
   tatl_receive(TATL_SOCK, &type, NULL, 0); // TODO : received error message
   
@@ -185,39 +185,52 @@ void* tatl_handle_client (void* arg) {
   
   // Receive a username
   message_size = tatl_receive(socket, &type, message, MAX_CHAT_SIZE);
+  char username [MAX_USERNAME_SIZE];
+  strcpy(username, message);
+
+  // Place the new user in USER_MAP
   userdata new_userdata = tatl_create_userdata(message, socket);
-  sh_insert(USER_MAP, message, &new_userdata, sizeof(userdata));
-  printf("%s has logged on.\n", message);
+  sh_set(USER_MAP, message, &new_userdata, sizeof(userdata));
 
   // Send a login confirmation
   tatl_send(socket, CONFIRMATION, NULL, 0);
   
+  printf("%s has logged on.\n", message);
+
   while (1) {
-    printf("user map is: \n");
+    printf("\nUSER_MAP: \n");
     sh_print(USER_MAP, 0, tatl_print_userdata);
-    printf("\n");
+    printf("\n\n");
+
+    printf("ROOM_MAP: \n");
+    sh_print(ROOM_MAP, 0, 0);
+    printf("\n\n");
 
     message_size = tatl_receive(socket, &type, message, MAX_CHAT_SIZE);
     if (message_size <= 0) {
       close(socket);
-      sh_remove(USER_MAP, new_userdata.name);
+      sh_remove(USER_MAP, username);
       break;
     }
     printf("received message: %s\n", message);
 
     // TODO : Set up an error message system
-    // TODO : redo hash to handle only void pointers, force user to allocate everything himself
     switch (type) {
     case CREATE_ROOM_REQUEST:
       if (!sh_exists(ROOM_MAP, message)) {
-	int x = 42;
-	sh_insert(ROOM_MAP, message, &x, sizeof(int));
-	userdata* data;
-	sh_get(USER_MAP, new_userdata.name, &data);
-	strcpy(data->room, message);
-	printf("SERVER: created room %s\n", (char*)message);
+	// Insert the new room into ROOM_MAP
+	sh_set(ROOM_MAP, message, "<ROOM DATA HERE>", strlen("<ROOM DATA HERE>"));
 
+	// Change the user's data to indicate which room they are in
+	userdata data;
+	sh_get(USER_MAP, username, &data, sizeof(userdata));
+	strcpy(data.room, message);
+	sh_set(USER_MAP, username, &data, sizeof(userdata));
+	
+	// Send a confirmation to the user
 	tatl_send(socket, CONFIRMATION, NULL, 0);
+
+	printf("SERVER: created room %s\n", (char*)message);
       } else {
 	printf("did not create room.\n");
 	tatl_send(socket, DENIAL, NULL, 0);;

@@ -15,9 +15,9 @@ const int PRIMES [26] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71
 
 struct node;
 struct shash {
-  int _VALUE_SIZE;
-  int _SIZE;
-  struct node** _TABLE;
+  int VALUE_SIZE;
+  int SIZE;
+  struct node** TABLE;
   int (*CALCULATE_HASH) (struct shash* map, const char* key);
 };
 
@@ -33,7 +33,7 @@ int sh_calculate_hash (struct shash* map, const char* key) {
   for (; i < strlen(key); ++i) {
     sig *= PRIMES[(*key)%26];
   }
-  return (sig%map->_SIZE);
+  return (sig%map->SIZE);
 }
 
 
@@ -44,8 +44,8 @@ int sh_calculate_hash (struct shash* map, const char* key) {
 // RETURNS: pointer to the new shash struct
 struct shash* sh_create_map (int size) {
   struct shash* map = malloc(sizeof(struct shash));
-  map->_SIZE = size>0 ? size : SASSY_HASH_DEFAULT_SIZE;
-  map->_TABLE = malloc(sizeof(struct node*) * map->_SIZE);
+  map->SIZE = size>0 ? size : SASSY_HASH_DEFAULT_SIZE;
+  map->TABLE = malloc(sizeof(struct node*) * map->SIZE);
   map->CALCULATE_HASH = sh_calculate_hash;
   return map;
 }
@@ -57,8 +57,8 @@ struct shash* sh_create_map (int size) {
 // Deletes the map from memory
 void sh_delete_map (struct shash* map) {
   int i;
-  for (i = 0; i < map->_SIZE; ++i) {
-    ll_delete_list(map->_TABLE[i]); // it checks for null so it's cool
+  for (i = 0; i < map->SIZE; ++i) {
+    ll_delete_list(map->TABLE[i]); // it checks for null so it's cool
   }
   free(map);
 }
@@ -71,7 +71,7 @@ void sh_delete_map (struct shash* map) {
 // RETURNS: pointer to the node, or NULL if the key does not exist
 struct node* sh_find_node (struct shash* map, const char* key) {
   int hash = map->CALCULATE_HASH(map, key);
-  struct node* head = map->_TABLE[hash];
+  struct node* head = map->TABLE[hash];
   return ll_find_node(head, key);
 }
 
@@ -81,10 +81,10 @@ struct node* sh_find_node (struct shash* map, const char* key) {
 // Inserts the 'key' 'value' pair into the given 'map'.
 // If the 'key' already exists, replaces the current value with 'value'
 // RETURNS: 0 if the key was inserted, 1 if the key already existed
-int sh_insert (struct shash* map, const char* key, void* value, int value_size) {
+int sh_set (struct shash* map, const char* key, void* value, int value_size) {
   int hash = map->CALCULATE_HASH(map, key);
-  int existed = ll_delete_key(&(map->_TABLE[hash]), key);
-  ll_insert_node(&(map->_TABLE[hash]), key, value, value_size);
+  int existed = ll_delete_key(&(map->TABLE[hash]), key);
+  ll_insert_node(&(map->TABLE[hash]), key, value, value_size);
   return existed;
 }
 
@@ -95,7 +95,7 @@ int sh_insert (struct shash* map, const char* key, void* value, int value_size) 
 // RETURNS: 0 if a key was removed, 1 if the key was not found
 int sh_remove (struct shash* map, const char* key) {
   int hash = map->CALCULATE_HASH(map, key);
-  return ll_delete_key(&(map->_TABLE[hash]), key); 
+  return ll_delete_key(&(map->TABLE[hash]), key); 
 }
 
 //
@@ -112,17 +112,15 @@ int sh_exists (struct shash* map, const char* key) {
 //
 // Gets the value corresponding to the 'key' in the given 'map'
 // Places the value into 'value'
-// RETURNS: 0 if key was found, 1 if not
-int sh_get (struct shash* map, const char* key, void** value) {
+// RETURNS: 1 if key was found, 0 if not
+int sh_get (struct shash* map, const char* key, void* value, int max_size) {
   struct node* node = sh_find_node(map, key);
-  if (node) *value = node->value;
-  return (node ? 0 : 1);
+  if (node) {
+    int size_to_copy = max_size > node->value_size ? node->value_size : max_size;
+    memcpy(value, node->value, size_to_copy);
+  }
+  return (node ? 1 : 0);
 }
-
-
-//////////////
-// PRINTING //
-//////////////
 
 //
 // sh_print
@@ -138,8 +136,8 @@ void sh_print (struct shash* map, int full, void (*print)(void* value, char* str
   }
 
   int prev = 0;
-  for (i = 0; i < map->_SIZE; ++i) {
-    ll_to_str(map->_TABLE[i], ll, print);
+  for (i = 0; i < map->SIZE; ++i) {
+    ll_to_str(map->TABLE[i], ll, print);
     if (!strlen(ll)) continue;
 
     if (!full) {
@@ -161,4 +159,3 @@ void sh_print (struct shash* map, int full, void (*print)(void* value, char* str
     printf("\n");
   }
 }
-

@@ -62,11 +62,16 @@ int ezsend (int sock, const void* data, int len) {
 }
 
 int ezreceive (int sock, void* data, int len) {
-  int n;
+  int n, bytes_received = 0;
   socklen_t socklen = (sizeof(struct sockaddr_in));
-  if ((n = recvfrom(sock, data, len, 0, NULL, &socklen)) < 0) {
-    if (EZ_PRINT_ERROR) perror("Error when receiving data");
-  } 
+  while (bytes_received < len) {
+    if ((n = recvfrom(sock, data, len-bytes_received, 0, NULL, &socklen)) <= 0) {
+      if (EZ_PRINT_ERROR) perror("Error when receiving data");
+      return n;
+    } else {
+      bytes_received += n;
+    }    
+  }
   return n;
 }
 	       

@@ -69,11 +69,9 @@ void* tatl_chat_listener (void* arg) {
   int message_size;
   while (1) {
     message_size = tatl_receive(TATL_SOCK, &type, chat, 1024); // TODO : received error message
-    printf("Received %d bytes. Message type is: %d\n", message_size, type);
     if (message_size < 0) {
       pthread_exit(NULL);
     } else if (type == CHAT) {
-      printf("In tatl listener, message is: %s\n", chat);
       listener_function(chat);
     } else if (type == CONFIRMATION) {
       pthread_exit(NULL);
@@ -120,8 +118,6 @@ int tatl_enter_room (const char* roomname) {
   char err [1024];
   tatl_receive(TATL_SOCK, &type, err, 1024);
   
-  pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
-
   if (type == CONFIRMATION) {
     // We are in the room. Spawn the listener thread.
     pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
@@ -155,6 +151,8 @@ int tatl_leave_room () {
   }
   
   tatl_send(TATL_SOCK, LEAVE_ROOM_REQUEST, NULL, 0);
+  printf("[[JOINING THREADS...]]\n");
   pthread_join(TATL_LISTENER_THREAD, NULL);
+  printf("[[JOINED THREADS]]\n");
   return 0;
 }

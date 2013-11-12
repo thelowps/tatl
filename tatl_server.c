@@ -137,6 +137,7 @@ void* tatl_handle_client (void* arg) {
     printf("\n\n");
 
     message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
+    printf("Received %d bytes from a user.\n", message_size);
     if (message_size < 0) {
       tatl_logout_user(username);
       return NULL;
@@ -289,8 +290,8 @@ int tatl_user_chatted (const char* chat, const char* username) {
     sh_get(USER_MAP, head->key, &chatee, sizeof(userdata));
     head = head->next;
     if (strcmp(chatee.name, user.name) == 0) continue;
-    tatl_send(chatee.socket, CHAT, chat, strlen(chat)+1);
-    printf("Sending chat \"%s\" to %s\n", chat, chatee.name);
+    int bytes_sent = tatl_send(chatee.socket, CHAT, chat, strlen(chat)+1);
+    printf("Sending chat \"%s\" to %s. Sent %d bytes.\n", chat, chatee.name, bytes_sent);
   }
   
   return 1;
@@ -320,6 +321,7 @@ int tatl_remove_from_room (const char* username) {
 
 // Destroy a user's data and log him out
 int tatl_logout_user (const char* username) {
+  printf("Logging out user %s\n", username);
   // Get updated user data
   userdata user;
   sh_get(USER_MAP, username, &user, sizeof(userdata));

@@ -37,9 +37,7 @@ int main (int argc, char* argv[]) {
       size_t n = 1024;
       printf("Chat: ");
       int chars = getline(&chat, &n, stdin);
-      printf("Read %d characters from input.\n", chars);
       if (chat[chars-1] == '\n') {
-	printf("replace\n");
 	chat[chars-1] = 0;
       }
 

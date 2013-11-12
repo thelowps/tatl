@@ -18,7 +18,7 @@ struct shash {
   int VALUE_SIZE;
   int SIZE;
   struct node** TABLE;
-  int (*CALCULATE_HASH) (struct shash* map, const char* key);
+  int (*CALCULATE_HASH) (shash_t map, const char* key);
 };
 
 //
@@ -26,7 +26,7 @@ struct shash {
 //
 // Calculates the hash for the given key.
 // RETURNS: the calculated hash
-int sh_calculate_hash (struct shash* map, const char* key) {
+int sh_calculate_hash (shash_t map, const char* key) {
   // Damn, this is one shitty hash.
   long long unsigned sig = 1;
   int i = 0;
@@ -42,9 +42,9 @@ int sh_calculate_hash (struct shash* map, const char* key) {
 //
 // Creates a new hash map. 'size' indicates the array size to be used
 // RETURNS: pointer to the new shash struct
-struct shash* sh_create_map (int size) {
-  struct shash* map = malloc(sizeof(struct shash));
-  map->SIZE = size>0 ? size : SASSY_HASH_DEFAULT_SIZE;
+shash_t sh_create_map () {
+  shash_t map = malloc(sizeof(struct shash));
+  map->SIZE = SASSY_HASH_DEFAULT_SIZE;
   map->TABLE = malloc(sizeof(struct node*) * map->SIZE);
   map->CALCULATE_HASH = sh_calculate_hash;
   return map;
@@ -55,7 +55,7 @@ struct shash* sh_create_map (int size) {
 // sh_delete_map
 //
 // Deletes the map from memory
-void sh_delete_map (struct shash* map) {
+void sh_delete_map (shash_t map) {
   int i;
   for (i = 0; i < map->SIZE; ++i) {
     ll_delete_list(map->TABLE[i]); // it checks for null so it's cool
@@ -69,7 +69,7 @@ void sh_delete_map (struct shash* map) {
 // 
 // Finds the node with the given 'key' in the given 'map'
 // RETURNS: pointer to the node, or NULL if the key does not exist
-struct node* sh_find_node (struct shash* map, const char* key) {
+struct node* sh_find_node (shash_t map, const char* key) {
   int hash = map->CALCULATE_HASH(map, key);
   struct node* head = map->TABLE[hash];
   return ll_find_node(head, key);
@@ -81,7 +81,7 @@ struct node* sh_find_node (struct shash* map, const char* key) {
 // Inserts the 'key' 'value' pair into the given 'map'.
 // If the 'key' already exists, replaces the current value with 'value'
 // RETURNS: 0 if the key was inserted, 1 if the key already existed
-int sh_set (struct shash* map, const char* key, void* value, int value_size) {
+int sh_set (shash_t map, const char* key, void* value, int value_size) {
   int hash = map->CALCULATE_HASH(map, key);
   int existed = ll_delete_key(&(map->TABLE[hash]), key);
   ll_insert_node(&(map->TABLE[hash]), key, value, value_size);
@@ -93,7 +93,7 @@ int sh_set (struct shash* map, const char* key, void* value, int value_size) {
 //
 // Removes the given 'key' from the given 'map'
 // RETURNS: 0 if a key was removed, 1 if the key was not found
-int sh_remove (struct shash* map, const char* key) {
+int sh_remove (shash_t map, const char* key) {
   int hash = map->CALCULATE_HASH(map, key);
   return ll_delete_key(&(map->TABLE[hash]), key); 
 }
@@ -103,7 +103,7 @@ int sh_remove (struct shash* map, const char* key) {
 //
 // Checks if a given 'key' exists in the given 'map'
 // RETURNS: 1 if it exists, 0 if it does not
-int sh_exists (struct shash* map, const char* key) {
+int sh_exists (shash_t map, const char* key) {
   return (sh_find_node(map, key) ? 1 : 0);
 }
 
@@ -113,7 +113,7 @@ int sh_exists (struct shash* map, const char* key) {
 // Gets the value corresponding to the 'key' in the given 'map'
 // Places the value into 'value'
 // RETURNS: 1 if key was found, 0 if not
-int sh_get (struct shash* map, const char* key, void* value, int max_size) {
+int sh_get (shash_t map, const char* key, void* value, int max_size) {
   struct node* node = sh_find_node(map, key);
   if (node) {
     int size_to_copy = max_size > node->value_size ? node->value_size : max_size;
@@ -127,7 +127,7 @@ int sh_get (struct shash* map, const char* key, void* value, int max_size) {
 //
 // Prints the map's contents to standard output
 // If full != 0, then the buckets will be shown too
-void sh_print (struct shash* map, int full, void (*print)(void* value, char* str)) {
+void sh_print (shash_t map, int full, void (*print)(void* value, char* str)) {
   int i;
   char ll [99999];
 

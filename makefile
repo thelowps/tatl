@@ -1,6 +1,6 @@
 CC=gcc
-OBJ=tatl.o eztcp.o sassyhash.o linked.o
-DEPS=tatl.h eztcp.h
+OBJ=tatl_core.o tatl_client.o tatl_server.o eztcp.o sassyhash.o linked.o
+DEPS=tatl_core.h tatl_client.h tatl_server.h eztcp.h sassyhash.h linked.h
 CFLAGS=-lpthread -Wall
 
 all: client server
@@ -15,4 +15,4 @@ server: server.o $(OBJ)
 	$(CC) -c $< $(CFLAGS)
 
 clean:
-	rm -rf $(OBJ) client.o server.o client server
+	rm -rf *.o client server

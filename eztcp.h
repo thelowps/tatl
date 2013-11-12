@@ -33,4 +33,7 @@ int ezlisten(int* sock, int port);
 // Accept clients over a given socket
 int ezaccept(int sock);
 
+// Closes a connection
+int ezclose(int sock);
+
 #endif

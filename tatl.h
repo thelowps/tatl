@@ -13,9 +13,13 @@
 #define TATL_DEFAULT_SERVER_PORT 9042
 
 // CLIENT
-int tatl_init_client (const char* server_ip, int server_port, int flags);
-int tatl_login (const char* username);
-int tatl_create_room (const char* roomname);
+int  tatl_init_client (const char* server_ip, int server_port, int flags);
+int  tatl_login (const char* username);
+int  tatl_request_new_room (const char* roomname);
+int  tatl_enter_room (const char* roomname);
+void tatl_set_chat_listener (void (*listen)(char* message));
+int  tatl_chat (const char* chat);
+int  tatl_leave_room ();
 
 // SERVER
 int tatl_init_server (int port, int flags);

@@ -15,11 +15,10 @@
  *   with any ASCII string, but there will be less collisions if we deal only with lower-case
  *   alphabetical strings.
  *   Note that for a given map, the hash function can be overwritten. If you do this, make sure
- *   you modulo your hash by map->_SIZE to keep it within the array bounds.
+ *   you modulo your hash by map->SIZE to keep it within the array bounds.
  *
  * COLLISION RESOLUTION:
- *   Collision resolution is done with linked lists at each bucket. Yes, I know it's O(n).
- *   A binary tree would have been too much work. 
+ *   Collision resolution is done with linked lists at each bucket. Yes, I know it's O(n). Jesus.
  *
  * NOTES:
  *   Copies of the keys and values are stored internally. There are advantages and disadvantages
@@ -39,7 +38,7 @@
 struct shash;
 typedef struct shash* shash_t;
 
-// Creates and returns a sassy hashmap.
+// Creates a sassy hashmap and returns a handle to it.
 shash_t sh_create_map ();
 
 
@@ -60,7 +59,7 @@ int  sh_get (shash_t map, const char* key, void* value, int max_size);
 int  sh_remove (shash_t map, const char* key);
 
 
-// Returns 1 if 'key' exists in 'map', and 0 otherwise
+// Returns 1 if 'key' exists in 'map', and 0 otherwise.
 int  sh_exists (shash_t map, const char* key);
 
 

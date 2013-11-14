@@ -16,7 +16,7 @@ int main (int argc, char* argv[]) {
 
   tatl_init_client (TATL_DEFAULT_SERVER_IP, TATL_DEFAULT_SERVER_PORT, 0);
   if (tatl_login(argv[1])) {
-    printf("CLIENT: Error logging in.\n");
+    tatl_print_error("CLIENT: Error logging in");
     return 1;
   }
   tatl_set_chat_listener(handle_chat);
@@ -27,15 +27,19 @@ int main (int argc, char* argv[]) {
   
   int i;
   for (i = 0; i < 3; ++i) {
-    printf("CLIENT: attempting to log into room %s\n", names[i]);
+    // Enter the next room
+    printf("CLIENT: Attempting to log into room %s...\n", names[i]);
     if (tatl_request_new_room(names[i])) {
-      tatl_enter_room(names[i]);
+      if (tatl_enter_room(names[i])) {
+	tatl_print_error("CLIENT: Failure to enter room");
+	continue;
+      }
     }
     
+    printf("CLIENT: Entered room %s!\n", names[i]);
     while (1) {
       char* chat = malloc(sizeof(char) * 1024);
       size_t n = 1024;
-      printf("Chat: ");
       int chars = getline(&chat, &n, stdin);
       if (chat[chars-1] == '\n') {
 	chat[chars-1] = 0;

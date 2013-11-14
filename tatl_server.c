@@ -8,6 +8,7 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "tatl.h"
 #include "tatl_core.h"
 #include "sassyhash.h"
 #include "linked.h"
@@ -46,6 +47,7 @@ void tatl_print_roomdata (void* value, char* str) {
   }
   sprintf(str, "[name:%s, users:%s]", data->name, users);
 }
+
 
 int tatl_init_server (int port, int flags) {
   if (CURRENT_MODE != NOT_INITIALIZED) {
@@ -114,7 +116,6 @@ void* tatl_handle_client (void* arg) {
       ezclose(socket);
       return NULL;
     } else if (type != LOGIN) {
-      printf("Error -- incorrect message type.\n");
       char* err = "Please send a login request with your username.";
       tatl_send(socket, DENIAL, err, strlen(err)+1);
       continue;
@@ -128,14 +129,15 @@ void* tatl_handle_client (void* arg) {
 
   // MAIN CLIENT LOOP
   while (1) {
-    printf("\n--SERVER--\nUSER_MAP: \n");
+    printf("\n------------------------\nUSER_MAP: \n");
     sh_print(USER_MAP, 0, tatl_print_userdata);
     printf("\n\n");
 
     printf("ROOM_MAP: \n");
     sh_print(ROOM_MAP, 0, tatl_print_roomdata);
-    printf("\n\n");
+    printf("\n------------------------\n");
 
+    // Received message
     message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
     printf("Received %d bytes from a user.\n", message_size);
     if (message_size < 0) {
@@ -143,31 +145,22 @@ void* tatl_handle_client (void* arg) {
       return NULL;
     }
 
-    // TODO : Set up an error message system
-    switch (type) {
-    case CREATE_ROOM_REQUEST:
+    // Handle message
+    if (type == CREATE_ROOM_REQUEST) {
       tatl_create_room(message, username);
-      break;
-
-    case ENTER_ROOM_REQUEST:
+    } else if (type == ENTER_ROOM_REQUEST) {
       tatl_move_to_room(message, username);
-      break;
-
-    case LEAVE_ROOM_REQUEST:
+    } else if (type == LEAVE_ROOM_REQUEST) {
       tatl_remove_from_room(username);
-      break;
-
-    case CHAT:
+    } else if (type == CHAT) {
       tatl_user_chatted(message, username);
-      break;
-
-    case LOGOUT:
+    } else if (type == LOGOUT) {
       tatl_logout_user(username);
       return NULL;
     }
   }
 
-  return 0;
+  return NULL;
 }
 
 

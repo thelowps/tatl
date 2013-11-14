@@ -6,11 +6,8 @@
  *
  */
 
+#include "tatl.h"
 #include "eztcp.h"
-
-#define TATL_MAX_USERNAME_SIZE 100
-#define TATL_MAX_ROOMNAME_SIZE 100
-#define TATL_MAX_CHAT_SIZE 100
 
 // Defines the mode that a tatl program is running in
 typedef enum {
@@ -33,7 +30,9 @@ typedef enum {
   DENIAL
 } MESSAGE_TYPE;
 
-int tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size);
-int tatl_receive (int socket, MESSAGE_TYPE* message_type, void* message, int size);
+int  tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size);
+int  tatl_receive (int socket, MESSAGE_TYPE* message_type, void* message, int size);
+void tatl_set_error (const char* error);
+void tatl_print_error (const char* msg);
 
 #endif

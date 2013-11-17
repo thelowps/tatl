@@ -24,6 +24,10 @@ struct node {
 //   manage the memory yourself and simply store pointers as your values.
 void ll_insert_node (struct node** head, const char* key, void* value, int value_size);
 
+// Get the size of the linked list.
+// Returns the number of nodes of the linked list that starts at 'head'
+int ll_size (struct node* head);
+
 // Delete from a linked list.
 // Deletes the first node found with the given key.
 int  ll_delete_key (struct node** head, const char* key);

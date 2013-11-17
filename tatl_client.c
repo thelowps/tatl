@@ -13,47 +13,67 @@
 
 // The socket to communicate with the server on
 int TATL_SOCK;
+char TATL_SERVER_IP [1024] = {0};
+int TATL_SERVER_PORT;
 
-// Status of the program
 extern TATL_MODE CURRENT_MODE;
+typedef enum {NOT_LOGGED_IN, LOGGED_IN} TATL_CLIENT_STATUS;
+TATL_CLIENT_STATUS CURRENT_CLIENT_STATUS = NOT_LOGGED_IN;
 
-// Status of the client
-enum {NOT_LOGGED_IN, LOGGED_IN} TATL_CLIENT_STATUS = NOT_LOGGED_IN;
+char CURRENT_USERNAME [TATL_MAX_USERNAME_SIZE] = {0};
 
 // Function to be called when a chat message from others in the room is received
 void (*listener_function)(char* message);
-
-// Thread to listen to chat messages
 pthread_t TATL_LISTENER_THREAD;
 
-// Initialize the client
+// Helper function to make sure everything is properly set up before performing actions
+int tatl_sanity_check (TATL_MODE expected_mode, TATL_CLIENT_STATUS expected_status) {
+  if (CURRENT_MODE != expected_mode) {
+    if (expected_mode == CLIENT) tatl_set_error("Tatl not initialized as client.");
+    if (expected_mode == NOT_INITIALIZED) tatl_set_error("Tatl already initialized.");
+    return -1;
+  } else if (CURRENT_CLIENT_STATUS != expected_status) {
+    if (expected_status == NOT_LOGGED_IN) tatl_set_error("Already logged in.");
+    if (expected_status == LOGGED_IN) tatl_set_error("Not logged in.");
+    return -1;
+  }  
+  return 0;
+}
+
 int tatl_init_client (const char* server_ip, int server_port, int flags) {  
+  if (tatl_sanity_check(NOT_INITIALIZED, NOT_LOGGED_IN)) {
+    return -1;
+  }
+  
   if (ezconnect(&TATL_SOCK, server_ip, server_port) < 0) {
     return -1;
   }
   
   CURRENT_MODE = CLIENT;
+
+  strcpy(TATL_SERVER_IP, server_ip);
+  TATL_SERVER_PORT = server_port;
+
   return 0;
 }
 
 // Log in to the server with the given username
 int tatl_login (const char* username) {
-  // Sanity checking
-  if (CURRENT_MODE != CLIENT) { // Not initialized, or not a client
-    tatl_set_error("Not initialized as client.");
-    return -1;
-  } else if (TATL_CLIENT_STATUS == LOGGED_IN) { // Already logged on
-    tatl_set_error("Already logged on.");
+  if (tatl_sanity_check(CLIENT, NOT_LOGGED_IN)) {
     return -1;
   }
 
+  // Send the username to the server
   tatl_send(TATL_SOCK, LOGIN, username, strlen(username)+1);
+
+  // Receive response
   char err [1024];
   MESSAGE_TYPE type = DENIAL;
   tatl_receive(TATL_SOCK, &type, err, 1024);
 
   if (type == CONFIRMATION) {
-    TATL_CLIENT_STATUS = LOGGED_IN;
+    strcpy(CURRENT_USERNAME, username);
+    CURRENT_CLIENT_STATUS = LOGGED_IN;
     return 0;
   } else {
     tatl_set_error(err);
@@ -62,18 +82,17 @@ int tatl_login (const char* username) {
 }
 
 
-// Sets the chat listener
-void tatl_set_chat_listener (void (*listen)(char* message)) {
-  listener_function = listen;
-}
-
-// Listen for chats on the given connection and call the listener function
+// Listen for chats and call the user set listener function
 void* tatl_chat_listener (void* arg) {
+  int listener_socket;
+  ezconnect(&listener_socket, TATL_SERVER_IP, TATL_SERVER_PORT);
+  tatl_send(listener_socket, LISTENER_REQUEST, CURRENT_USERNAME, strlen(CURRENT_USERNAME)+1);
+
   MESSAGE_TYPE type;
   char chat [TATL_MAX_CHAT_SIZE];
   int message_size;
   while (1) {
-    message_size = tatl_receive(TATL_SOCK, &type, chat, 1024); 
+    message_size = tatl_receive(listener_socket, &type, chat, 1024); 
     if (message_size < 0) {
       pthread_exit(NULL);
     } else if (type == CHAT) {
@@ -85,14 +104,21 @@ void* tatl_chat_listener (void* arg) {
   pthread_exit(NULL);
 }
 
+void tatl_spawn_chat_listener () {
+  pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
+}
+
+void tatl_join_chat_listener () {
+  pthread_join(TATL_LISTENER_THREAD, NULL);  
+}
+
+void tatl_set_chat_listener (void (*listen)(char* message)) {
+  listener_function = listen;
+}
+
 // Request creation of a chat room
 int tatl_request_new_room (const char* roomname) {
-  // Sanity checking
-  if (CURRENT_MODE != CLIENT) { // Not initialized, or not a client
-    tatl_set_error("Not initialized as client.");
-    return -1;
-  } else if (TATL_CLIENT_STATUS != LOGGED_IN) { // not logged on
-    tatl_set_error("Not logged on.");
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
     return -1;
   }
 
@@ -102,8 +128,7 @@ int tatl_request_new_room (const char* roomname) {
   tatl_receive(TATL_SOCK, &type, err, 1024);
 
   if (type == CONFIRMATION) {
-    // We are in the room. Spawn the listener thread.
-    pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
+    tatl_spawn_chat_listener();
     return 0;
   } else {
     tatl_set_error(err);
@@ -113,12 +138,7 @@ int tatl_request_new_room (const char* roomname) {
 
 // Request entering a room
 int tatl_enter_room (const char* roomname) {
-  // Sanity checking
-  if (CURRENT_MODE != CLIENT) { // Not initialized, or not a client
-    tatl_set_error("Not initialized as client.");
-    return -1;
-  } else if (TATL_CLIENT_STATUS != LOGGED_IN) { // not logged on
-    tatl_set_error("Not logged on.");
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
     return -1;
   }
 
@@ -128,8 +148,7 @@ int tatl_enter_room (const char* roomname) {
   tatl_receive(TATL_SOCK, &type, err, 1024);
   
   if (type == CONFIRMATION) {
-    // We are in the room. Spawn the listener thread.
-    pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
+    tatl_spawn_chat_listener();
     return 0;
   } else {
     tatl_set_error(err);
@@ -139,12 +158,7 @@ int tatl_enter_room (const char* roomname) {
 
 // Send a chat to the current chatroom
 int tatl_chat (const char* chat) {
-  // Sanity checking
-  if (CURRENT_MODE != CLIENT) { // Not initialized, or not a client
-    tatl_set_error("Not initialized as client.");
-    return -1;
-  } else if (TATL_CLIENT_STATUS != LOGGED_IN) { // not logged on
-    tatl_set_error("Not logged on.");
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
     return -1;
   }
 
@@ -154,22 +168,26 @@ int tatl_chat (const char* chat) {
 
 // Request to leave the current chatroom
 int tatl_leave_room () {
-  // Sanity checking
-  if (CURRENT_MODE != CLIENT) { // Not initialized, or not a client
-    tatl_set_error("Not initialized as client.");
-    return -1;
-  } else if (TATL_CLIENT_STATUS != LOGGED_IN) { // not logged on
-    tatl_set_error("Not logged on.");
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
     return -1;
   }
   
   tatl_send(TATL_SOCK, LEAVE_ROOM_REQUEST, NULL, 0);
-  pthread_join(TATL_LISTENER_THREAD, NULL);
+  tatl_join_chat_listener();
   return 0;
 }
 
 // Ask for a list of the members of the current chatroom
-int tatl_request_room_members () {
-  return 1;
-}
+// Returns a list of comma separated names
+// TODO : not allow commas in names
+int tatl_request_room_members (char* names) {
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
+    return -1;
+  }
 
+  tatl_send(TATL_SOCK, ROOM_MEMBERS_REQUEST, NULL, 0);
+  MESSAGE_TYPE type = DENIAL;
+  tatl_receive(TATL_SOCK, &type, names, (TATL_MAX_USERNAME_SIZE+1)*TATL_MAX_MEMBERS_PER_ROOM);
+
+  return 0;
+}

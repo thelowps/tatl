@@ -21,6 +21,7 @@ typedef struct {
   char name [TATL_MAX_USERNAME_SIZE];
   char room [TATL_MAX_ROOMNAME_SIZE];
   int socket;
+  int listener_socket;
 } userdata;
 
 typedef struct {
@@ -51,6 +52,7 @@ void tatl_print_roomdata (void* value, char* str) {
 
 int tatl_init_server (int port, int flags) {
   if (CURRENT_MODE != NOT_INITIALIZED) {
+    tatl_set_error("Already initialized.");
     return -1;
   }
   CURRENT_MODE = SERVER;
@@ -62,9 +64,10 @@ int tatl_init_server (int port, int flags) {
   return 0;
 }
 
-void* tatl_handle_client (void* arg);
+void* tatl_handle_new_connection (void* arg);
 int tatl_run_server () {
   if (CURRENT_MODE != SERVER) {
+    tatl_set_error("Not initialized as server.");
     return -1;
   }
   
@@ -72,62 +75,90 @@ int tatl_run_server () {
   int conn = 0;
   while (1) {
     if ((conn = ezaccept(TATL_SOCK)) < 0) {
+      tatl_set_error("Error accepting new client.");
       return -1;
     }
-    pthread_create(&thread, NULL, tatl_handle_client, &conn); 
+    // TODO: mutex conn to avoid a race condition with multiple clients at the same time
+    pthread_create(&thread, NULL, tatl_handle_new_connection, &conn);
   }
 
   return 0;
 }
-
-userdata tatl_create_userdata (const char* username, int socket) {
-  userdata new_user;
-  strncpy(new_user.name, username, TATL_MAX_USERNAME_SIZE);
-  new_user.room[0] = 0; //null terminate our string
-  new_user.socket = socket;
-  return new_user;
-}
-
 
 // Prototypes for use in the main loop
 int tatl_login_user   (const char* username, int socket);
 int tatl_create_room  (const char* room, const char* username);
 int tatl_move_to_room (const char* room, const char* username);
 int tatl_user_chatted (const char* chat, const char* username);
+int tatl_send_room_members (const char* username);
 int tatl_remove_from_room (const char* username);
 int tatl_logout_user  (const char* username);
 
-// Main client handler
-void* tatl_handle_client (void* arg) {
+void tatl_handle_client (int socket, const char* username);
+void* tatl_handle_new_connection (void* arg) {
   int socket = *((int*)arg);
   
   MESSAGE_TYPE type;
-  char* message = malloc(sizeof(char) * TATL_MAX_CHAT_SIZE);
-  int message_size;
+  char message [TATL_MAX_CHAT_SIZE];
   char username [TATL_MAX_USERNAME_SIZE];
+  int message_size;
+
+  message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
+  strcpy(username, message);
   
-  // LOG THE USER IN
-  while (1) { // Receive a username until we log in succesfully
-    printf("Attempting to login a user.\n");
-    message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
+  // LOGIN REQUEST
+  if (type == LOGIN) {
+    while (1) { // Receive a username until we log in succesfully
+      printf("Attempting to login a user.\n");
 
-    if (message_size < 0) {
-      printf("Message size < 0. Closing socket.\n");
-      ezclose(socket);
-      return NULL;
-    } else if (type != LOGIN) {
-      char* err = "Please send a login request with your username.";
-      tatl_send(socket, DENIAL, err, strlen(err)+1);
-      continue;
+      if (message_size < 0) {
+	printf("Failed to log in new user.\n");
+	ezclose(socket);
+	return NULL;
+      } else if (type != LOGIN) {
+	char* err = "Login request with username is required.";
+	tatl_send(socket, DENIAL, err, strlen(err)+1);
+	continue;
+      }
+      
+      strcpy(username, message);    
+      if (tatl_login_user(username, socket)) {
+	break; // log in successful
+      }
+      
+      // Receive another username 
+      message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
     }
-
-    strcpy(username, message);    
-    if (tatl_login_user(username, socket)) {
-      break; // log in successful
-    }
+    
+    tatl_handle_client(socket, username);
   }
 
+  // LISTENER REQUEST
+  else if (type == LISTENER_REQUEST) {
+    userdata user;
+    sh_get(USER_MAP, username, &user, sizeof(userdata));
+    user.listener_socket = socket;
+    sh_set(USER_MAP, username, &user, sizeof(userdata));
+  }
+  return NULL;
+}
+
+// Helper function to create userdata easily
+userdata tatl_create_userdata (const char* username, int socket) {
+  userdata new_user;
+  strncpy(new_user.name, username, TATL_MAX_USERNAME_SIZE);
+  new_user.room[0] = 0; //null terminate our string
+  new_user.socket = socket;
+  new_user.listener_socket = 0;
+  return new_user;
+}
+
+// Main client handler
+void tatl_handle_client (int socket, const char* username) {
   // MAIN CLIENT LOOP
+  int message_size;
+  char message [TATL_MAX_CHAT_SIZE+1] = {0};
+  MESSAGE_TYPE type;
   while (1) {
     printf("\n------------------------\nUSER_MAP: \n");
     sh_print(USER_MAP, 0, tatl_print_userdata);
@@ -142,10 +173,11 @@ void* tatl_handle_client (void* arg) {
     printf("Received %d bytes from a user.\n", message_size);
     if (message_size < 0) {
       tatl_logout_user(username);
-      return NULL;
+      return;
     }
 
     // Handle message
+    // TODO : sanity checks in each function. Should we kill the thread if we log out?
     if (type == CREATE_ROOM_REQUEST) {
       tatl_create_room(message, username);
     } else if (type == ENTER_ROOM_REQUEST) {
@@ -156,11 +188,13 @@ void* tatl_handle_client (void* arg) {
       tatl_user_chatted(message, username);
     } else if (type == LOGOUT) {
       tatl_logout_user(username);
-      return NULL;
+      return;
+    } else if (type == ROOM_MEMBERS_REQUEST) {
+      tatl_send_room_members(username);
     }
   }
 
-  return NULL;
+  return;
 }
 
 
@@ -283,10 +317,43 @@ int tatl_user_chatted (const char* chat, const char* username) {
     sh_get(USER_MAP, head->key, &chatee, sizeof(userdata));
     head = head->next;
     if (strcmp(chatee.name, user.name) == 0) continue;
-    int bytes_sent = tatl_send(chatee.socket, CHAT, chat, strlen(chat)+1);
+    int bytes_sent = tatl_send(chatee.listener_socket, CHAT, chat, strlen(chat)+1);
     printf("Sending chat \"%s\" to %s. Sent %d bytes.\n", chat, chatee.name, bytes_sent);
   }
   
+  return 1;
+}
+
+// Send a list of the room members to the given user
+int tatl_send_room_members (const char* username) {
+  // Get updated user data
+  userdata user;
+  sh_get(USER_MAP, username, &user, sizeof(userdata));
+
+  // Check if the user is in a room
+  if (strlen(user.room) < 0) {
+    char* err = "Not in a room.";
+    tatl_send(user.socket, DENIAL, err, strlen(err)+1);
+    return 0;
+  }
+
+  // We are good to go. Construct a list of all the room members
+  char names [(TATL_MAX_USERNAME_SIZE+1)*TATL_MAX_MEMBERS_PER_ROOM];
+  names[0] = 0;
+
+  roomdata room;
+  sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
+  struct node* head = room.users_head;
+  while (head) {
+    strcat(names, head->key);
+    strcat(names, ",");
+    head = head->next;
+  }
+
+  printf("calculated names: \"%s\"\n", names);
+  tatl_send(user.socket, CONFIRMATION, names, strlen(names)+1);
+  printf("sent names.\n");
+
   return 1;
 }
 
@@ -297,17 +364,28 @@ int tatl_remove_from_room (const char* username) {
   sh_get(USER_MAP, username, &user, sizeof(userdata));
 
   // Update room information
-  roomdata room;
-  sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
-  ll_delete_key(&(room.users_head), username);
-  sh_set(ROOM_MAP, user.room, &room, sizeof(roomdata));
+  if (strlen(user.room) > 0) {
+    roomdata room;
+    sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
+    ll_delete_key(&(room.users_head), username);
+
+    // If the room is now empty, delete it
+    if (ll_size(room.users_head) == 0) {
+      sh_remove(ROOM_MAP, user.room);
+    } else {
+      sh_set(ROOM_MAP, user.room, &room, sizeof(roomdata)); 
+    }
+  }
+
+  // Close user's listener socket
+  if (user.listener_socket) {
+    ezclose(user.listener_socket);
+    user.listener_socket = 0;
+  }
 
   // Update user information
   user.room[0] = 0;
   sh_set(USER_MAP, username, &user, sizeof(userdata));
-
-  // Send a confirmation to the user
-  tatl_send(user.socket, CONFIRMATION, NULL, 0);
 
   return 1;
 }
@@ -315,22 +393,12 @@ int tatl_remove_from_room (const char* username) {
 // Destroy a user's data and log him out
 int tatl_logout_user (const char* username) {
   printf("Logging out user %s\n", username);
-  // Get updated user data
   userdata user;
   sh_get(USER_MAP, username, &user, sizeof(userdata));
 
-  // Close the user's socket
+  tatl_remove_from_room(username);
   ezclose(user.socket);
 
-  // Remove the user from whatever chat rooms he might have been in
-  if (strlen(user.room) > 0) {
-    roomdata room;
-    sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
-    ll_delete_key(&(room.users_head), user.name);
-    sh_set(ROOM_MAP, user.room, &room, sizeof(roomdata));
-  }
-
-  // Remove the user from the user map
   sh_remove(USER_MAP, user.name);
 
   return 1;

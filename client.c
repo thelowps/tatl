@@ -37,6 +37,9 @@ int main (int argc, char* argv[]) {
     }
     
     printf("CLIENT: Entered room %s!\n", names[i]);
+    char names [1024];
+    tatl_request_room_members(names);
+    printf("CLIENT: Room members are: %s\nCLIENT: Please chat to your heart's content.\n", names);
     while (1) {
       char* chat = malloc(sizeof(char) * 1024);
       size_t n = 1024;

@@ -15,11 +15,23 @@ const int PRIMES [26] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71
 
 struct node;
 struct shash {
-  int VALUE_SIZE;
   int SIZE;
   struct node** TABLE;
   int (*CALCULATE_HASH) (shash_t map, const char* key);
 };
+
+//
+// sdbm_hash
+//
+// Simple implementation of the sdbm hashing algorithm.
+// RETURNS: hash for 'key'
+unsigned long sdbm_hash (const char* key) {
+  unsigned long hash = 5381;
+  unsigned int c;
+  while ((c = *key++))
+    hash = ((hash << 5) + hash) + c; // hash*33 + c
+  return hash;
+}
 
 //
 // sh_calculate_hash
@@ -27,13 +39,8 @@ struct shash {
 // Calculates the hash for the given key.
 // RETURNS: the calculated hash
 int sh_calculate_hash (shash_t map, const char* key) {
-  // Damn, this is one shitty hash.
-  long long unsigned sig = 1;
-  int i = 0;
-  for (; i < strlen(key); ++i) {
-    sig *= PRIMES[(*key)%26];
-  }
-  return (sig%map->SIZE);
+  unsigned long hash = sdbm_hash(key);
+  return (hash%map->SIZE);
 }
 
 
@@ -76,15 +83,20 @@ struct node* sh_find_node (shash_t map, const char* key) {
 }
 
 //
-// sh_insert
+// sh_set
 //
 // Inserts the 'key' 'value' pair into the given 'map'.
 // If the 'key' already exists, replaces the current value with 'value'
 // RETURNS: 0 if the key was inserted, 1 if the key already existed
 int sh_set (shash_t map, const char* key, void* value, int value_size) {
   int hash = map->CALCULATE_HASH(map, key);
+
+  // Delete the entry if it already existed.
   int existed = ll_delete_key(&(map->TABLE[hash]), key);
+
+  // Insert into the actual table. map->TABLE[hash] now points to the newly added node in the table
   ll_insert_node(&(map->TABLE[hash]), key, value, value_size);
+
   return existed;
 }
 
@@ -121,6 +133,24 @@ int sh_get (shash_t map, const char* key, void* value, int max_size) {
   }
   return (node ? 1 : 0);
 }
+
+//
+// sh_for_each
+//
+// Runs a given function for each entry in the hashtable.
+// Note that the usual warnings about altering a data structure while iterating over it
+// apply here.
+void sh_for_each (shash_t map, void (*to_do)(const char* key, void* value, int value_size)) {
+  int i;
+  for (i = 0; i < map->SIZE; ++i) {
+    struct node* head = map->TABLE[i];
+    while (head) {
+      to_do(head->key, head->value, head->value_size);
+      head = head->next;
+    }
+  }
+}
+
 
 //
 // sh_print

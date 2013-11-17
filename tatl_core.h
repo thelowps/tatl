@@ -9,23 +9,21 @@
 #include "tatl.h"
 #include "eztcp.h"
 
-// Defines the mode that a tatl program is running in
 typedef enum {
   NOT_INITIALIZED, 
   CLIENT, 
   SERVER
 } TATL_MODE;
 
-// Defines types of messages, used for sending and receiving
 typedef enum {
   LOGIN, 
   LOGOUT, 
   CREATE_ROOM_REQUEST,
-  ENTER_ROOM_REQUEST,
+  ENTER_ROOM_REQUEST,  
   LEAVE_ROOM_REQUEST,
-  AUTHENTICATION_REQUEST,
-  AUTHENTICATION_RESPONSE,
+  LISTENER_REQUEST,
   CHAT, 
+  ROOM_MEMBERS_REQUEST,
   CONFIRMATION, 
   DENIAL
 } MESSAGE_TYPE;

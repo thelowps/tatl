@@ -37,6 +37,18 @@ void ll_insert_node (struct node** head, const char* key, void* value, int value
   *head = new_node;
 }
 
+//
+// ll_size
+//
+// RETURNS: the amount of nodes in the linked list
+int ll_size (struct node* head) {
+  int count = 0;
+  while (head) {
+    ++count;
+    head = head->next;
+  }
+  return count;
+}
 
 //
 // ll_delete_key

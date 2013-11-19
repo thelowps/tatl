@@ -36,4 +36,7 @@ int ezaccept(int sock);
 // Closes a connection
 int ezclose(int sock);
 
+// Gets socket data
+void ezsocketdata(int sock, char* ip, int* port);
+
 #endif

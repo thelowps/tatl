@@ -13,13 +13,18 @@
 #include "sassyhash.h"
 #include "linked.h"
 
+#define DEBUG
+
 extern TATL_MODE CURRENT_MODE;
+extern int TATL_USE_AUTHENTICATION;
 
 int TATL_SOCK = 0;
 
 typedef struct {
   char name [TATL_MAX_USERNAME_SIZE];
   char room [TATL_MAX_ROOMNAME_SIZE];
+  char ip_address [20];
+  int port;
   int socket;
   int listener_socket;
 } userdata;
@@ -49,6 +54,9 @@ void tatl_print_roomdata (void* value, char* str) {
   sprintf(str, "[name:%s, users:%s]", data->name, users);
 }
 
+void tatl_set_use_authentication (int use_authentication) {
+  TATL_USE_AUTHENTICATION = use_authentication;
+}
 
 int tatl_init_server (int port, int flags) {
   if (CURRENT_MODE != NOT_INITIALIZED) {
@@ -109,10 +117,14 @@ void* tatl_handle_new_connection (void* arg) {
   // LOGIN REQUEST
   if (type == LOGIN) {
     while (1) { // Receive a username until we log in succesfully
+#ifdef DEBUG
       printf("Attempting to login a user.\n");
+#endif
 
       if (message_size < 0) {
+#ifdef DEBUG
 	printf("Failed to log in new user.\n");
+#endif
 	ezclose(socket);
 	return NULL;
       } else if (type != LOGIN) {
@@ -150,6 +162,7 @@ userdata tatl_create_userdata (const char* username, int socket) {
   new_user.room[0] = 0; //null terminate our string
   new_user.socket = socket;
   new_user.listener_socket = 0;
+  ezsocketdata(socket, (char*)&(new_user.ip_address), &(new_user.port));
   return new_user;
 }
 
@@ -160,6 +173,7 @@ void tatl_handle_client (int socket, const char* username) {
   char message [TATL_MAX_CHAT_SIZE+1] = {0};
   MESSAGE_TYPE type;
   while (1) {
+#ifdef DEBUG
     printf("\n------------------------\nUSER_MAP: \n");
     sh_print(USER_MAP, 0, tatl_print_userdata);
     printf("\n\n");
@@ -167,10 +181,13 @@ void tatl_handle_client (int socket, const char* username) {
     printf("ROOM_MAP: \n");
     sh_print(ROOM_MAP, 0, tatl_print_roomdata);
     printf("\n------------------------\n");
+#endif
 
     // Received message
     message_size = tatl_receive(socket, &type, message, TATL_MAX_CHAT_SIZE);
+#ifdef DEBUG
     printf("Received %d bytes from a user.\n", message_size);
+#endif
     if (message_size < 0) {
       tatl_logout_user(username);
       return;
@@ -214,7 +231,9 @@ int tatl_login_user (const char* username, int socket) {
   // Send a login confirmation
   tatl_send(socket, CONFIRMATION, NULL, 0);
   
-  printf("%s has logged on.\n", username);  
+#ifdef DEBUG
+  printf("%s has logged on. IP: %s, port: %d\n", username, new_userdata.ip_address, new_userdata.port);  
+#endif
   return 1;
 }
 
@@ -253,7 +272,9 @@ int tatl_create_room (const char* roomname, const char* username) {
   // Send a confirmation to the user
   tatl_send(user.socket, CONFIRMATION, NULL, 0);
   
+#ifdef DEBUG
   printf("SERVER: created room %s\n", roomname);
+#endif 
   return 1;
 }
 
@@ -311,14 +332,18 @@ int tatl_user_chatted (const char* chat, const char* username) {
   roomdata room;
   sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
   struct node* head = room.users_head;
+#ifdef DEBUG
   printf("Sending chat \"%s\"\n", chat);
+#endif
   while (head) {
     userdata chatee;
     sh_get(USER_MAP, head->key, &chatee, sizeof(userdata));
     head = head->next;
     if (strcmp(chatee.name, user.name) == 0) continue;
     int bytes_sent = tatl_send(chatee.listener_socket, CHAT, chat, strlen(chat)+1);
+#ifdef DEBUG
     printf("Sending chat \"%s\" to %s. Sent %d bytes.\n", chat, chatee.name, bytes_sent);
+#endif
   }
   
   return 1;
@@ -350,9 +375,7 @@ int tatl_send_room_members (const char* username) {
     head = head->next;
   }
 
-  printf("calculated names: \"%s\"\n", names);
   tatl_send(user.socket, CONFIRMATION, names, strlen(names)+1);
-  printf("sent names.\n");
 
   return 1;
 }
@@ -392,7 +415,9 @@ int tatl_remove_from_room (const char* username) {
 
 // Destroy a user's data and log him out
 int tatl_logout_user (const char* username) {
+#ifdef DEBUG
   printf("Logging out user %s\n", username);
+#endif
   userdata user;
   sh_get(USER_MAP, username, &user, sizeof(userdata));
 

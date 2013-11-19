@@ -26,7 +26,7 @@
  *   Pros: 
  *     You do not have to worry about the scope of the values you pass in as keys or values, since
  *     their scope will always be the same as the scope of the hashmap.
- *     You cannot accidentally tamper with the internal data.
+ *     You cannot accidentally tamper with the internal data without an explicit call to sh_set.
  *     Less calls to malloc and free on the user side.
  *   Cons:
  *     Memory copying happens at every get and set. This could get expensive if the data structures 

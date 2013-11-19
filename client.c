@@ -7,6 +7,32 @@ void handle_chat (char* chat) {
   printf("%s\n", chat);
 }
 
+int authenticate_self (char* gatekeeper) {
+  // tatl_whisper(gatekeeper, "gx");
+  // tatl_receive_whisper(gatekeeper, gy);
+  // Request password from user
+  // Calculate hash
+  // Generate key g^xyh
+  // Encrypt random number, whisper
+  // Receive random number+1, decrypt
+  // Receive random number, decrypt
+  // Encrypt random number+1, whisper
+  // Receive room key, decrypt
+  // Store room key
+  // return 0
+  return 0;
+}
+
+int authenticate_other (char* knocker) {
+  // tatl_whisper(knocker, "gy")
+  // tatl_receive_whisper(knocker, gy);
+  // Generate key g^xyh
+  // Random number exchange
+  // Encrypt room key, send
+  // return 0
+  return 0;
+}
+
 int main (int argc, char* argv[]) {
   
   if (argc < 2) {

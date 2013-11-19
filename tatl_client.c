@@ -25,6 +25,20 @@ char CURRENT_USERNAME [TATL_MAX_USERNAME_SIZE] = {0};
 // Function to be called when a chat message from others in the room is received
 void (*listener_function)(char* message);
 pthread_t TATL_LISTENER_THREAD;
+void tatl_set_chat_listener (void (*listen)(char* message)) {
+  listener_function = listen;
+}
+
+// Functions to be called when entering a room requires authentication.
+// Should return 0 on success, -1 on failure
+int (*authentication_function)(char* gatekeeper) = NULL;
+int (*gatekeeper_function)(char* knocker) = NULL;
+void tatl_set_authentication_function(int (*fn)(char* gatekeeper)) {
+  authentication_function = fn;
+}
+void tatl_set_gatekeeper_function(int (*fn)(char* knocker)) {
+  gatekeeper_function = fn;
+}
 
 // Helper function to make sure everything is properly set up before performing actions
 int tatl_sanity_check (TATL_MODE expected_mode, TATL_CLIENT_STATUS expected_status) {
@@ -57,16 +71,13 @@ int tatl_init_client (const char* server_ip, int server_port, int flags) {
   return 0;
 }
 
-// Log in to the server with the given username
 int tatl_login (const char* username) {
   if (tatl_sanity_check(CLIENT, NOT_LOGGED_IN)) {
     return -1;
   }
 
-  // Send the username to the server
   tatl_send(TATL_SOCK, LOGIN, username, strlen(username)+1);
 
-  // Receive response
   char err [1024];
   MESSAGE_TYPE type = DENIAL;
   tatl_receive(TATL_SOCK, &type, err, 1024);
@@ -82,21 +93,23 @@ int tatl_login (const char* username) {
 }
 
 
-// Listen for chats and call the user set listener function
 void* tatl_chat_listener (void* arg) {
   int listener_socket;
   ezconnect(&listener_socket, TATL_SERVER_IP, TATL_SERVER_PORT);
   tatl_send(listener_socket, LISTENER_REQUEST, CURRENT_USERNAME, strlen(CURRENT_USERNAME)+1);
 
   MESSAGE_TYPE type;
+  //tchat chat;
   char chat [TATL_MAX_CHAT_SIZE];
   int message_size;
   while (1) {
-    message_size = tatl_receive(listener_socket, &type, chat, 1024); 
+    message_size = tatl_receive(listener_socket, &type, &chat, 1024); 
     if (message_size < 0) {
       pthread_exit(NULL);
     } else if (type == CHAT) {
-      listener_function(chat);
+      if (listener_function) {
+	listener_function(chat);	
+      }
     } else if (type == CONFIRMATION) {
       pthread_exit(NULL);
     }
@@ -110,10 +123,6 @@ void tatl_spawn_chat_listener () {
 
 void tatl_join_chat_listener () {
   pthread_join(TATL_LISTENER_THREAD, NULL);  
-}
-
-void tatl_set_chat_listener (void (*listen)(char* message)) {
-  listener_function = listen;
 }
 
 // Request creation of a chat room
@@ -144,25 +153,39 @@ int tatl_enter_room (const char* roomname) {
 
   tatl_send(TATL_SOCK, ENTER_ROOM_REQUEST, roomname, strlen(roomname)+1);
   MESSAGE_TYPE type = DENIAL;
-  char err [1024];
-  tatl_receive(TATL_SOCK, &type, err, 1024);
+  char msg [1024];
+  tatl_receive(TATL_SOCK, &type, msg, 1024);
   
   if (type == CONFIRMATION) {
     tatl_spawn_chat_listener();
     return 0;
+  } else if (type == AUTHENTICATION) {
+    if (authentication_function) {
+      return authentication_function(msg);
+    } else {
+      return -1;
+    }
   } else {
-    tatl_set_error(err);
+    tatl_set_error(msg);
     return -1;
   }  
 }
 
 // Send a chat to the current chatroom
-int tatl_chat (const char* chat) {
+int tatl_chat (const char* message) {
   if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
     return -1;
   }
-
-  tatl_send(TATL_SOCK, CHAT, chat, strlen(chat)+1);
+  
+  /*
+  tchat chat;
+  strcpy(chat.message, message);
+  strcpy(chat.sender, CURRENT_USERNAME);
+  char serialized [TATL_MAX_SERIALIZED_CHAT_SIZE];
+  tatl_serialize_chat(serialized, chat);
+  tatl_send(TATL_SOCK, CHAT, serialized, strlen(serialized)+1);
+  */
+  tatl_send(TATL_SOCK, CHAT, message, strlen(message)+1);
   return 0;
 }
 
@@ -189,5 +212,9 @@ int tatl_request_room_members (char* names) {
   MESSAGE_TYPE type = DENIAL;
   tatl_receive(TATL_SOCK, &type, names, (TATL_MAX_USERNAME_SIZE+1)*TATL_MAX_MEMBERS_PER_ROOM);
 
+  return 0;
+}
+
+int tatl_request_rooms (char* rooms) {
   return 0;
 }

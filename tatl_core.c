@@ -13,6 +13,7 @@
 
 TATL_MODE CURRENT_MODE = NOT_INITIALIZED;
 char TATL_ERROR [1024] = {0};
+int TATL_USE_AUTHENTICATION = 0;
 
 int tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size) {
   int bytes_sent = 0;
@@ -39,4 +40,19 @@ void tatl_set_error (const char* error) {
 
 void tatl_print_error (const char* msg) {
   printf("%s: %s\n", msg, TATL_ERROR);
+}
+
+// TODO: explicitly state sizes expected for functions
+void tatl_serialize_chat (char* serialized, tchat chat) {
+  int chat_len = strlen(chat.message);
+  sprintf(serialized, "%d %s %s", chat_len, chat.message, chat.sender);
+}
+
+void tatl_deserialize_chat (char* serialized, tchat* chat) {
+  int chat_len;
+  sscanf(serialized, "%d", &chat_len);
+  char* msg = serialized+2;
+  strncpy(chat->message, msg, chat_len+1);
+  char* sender = msg + chat_len + 2;
+  strcpy(chat->sender, sender);
 }

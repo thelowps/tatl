@@ -119,3 +119,11 @@ int ezaccept (int sock) {
 int ezclose (int sock) {
   return close(sock);
 }
+
+void ezsocketdata(int sock, char* ip, int* port) {
+  struct sockaddr_in sa;
+  socklen_t sa_len = sizeof(sa);
+  getsockname(sock, (struct sockaddr*)&sa, &sa_len);
+  strcpy(ip, inet_ntoa(sa.sin_addr));
+  *port = (int)ntohs(sa.sin_port);
+}

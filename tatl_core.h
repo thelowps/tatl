@@ -16,17 +16,15 @@ typedef enum {
 } TATL_MODE;
 
 typedef enum {
-  LOGIN, 
-  LOGOUT, 
-  CREATE_ROOM_REQUEST,
-  ENTER_ROOM_REQUEST,  
-  LEAVE_ROOM_REQUEST,
-  LISTENER_REQUEST,
-  CHAT, 
-  ROOM_MEMBERS_REQUEST,
+  ROOMS,
+  ROOM_MEMBERS,
   AUTHENTICATION,
+  JOIN_ROOM,
+  LEAVE_ROOM,
+  CHAT,
   CONFIRMATION, 
-  DENIAL
+  DENIAL,
+  LISTENER
 } MESSAGE_TYPE;
 
 int  tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size);

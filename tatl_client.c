@@ -71,6 +71,7 @@ int tatl_init_client (const char* server_ip, int server_port, int flags) {
   return 0;
 }
 
+/*
 int tatl_login (const char* username) {
   if (tatl_sanity_check(CLIENT, NOT_LOGGED_IN)) {
     return -1;
@@ -91,12 +92,12 @@ int tatl_login (const char* username) {
     return -1;
   }
 }
-
+*/
 
 void* tatl_chat_listener (void* arg) {
   int listener_socket;
   ezconnect(&listener_socket, TATL_SERVER_IP, TATL_SERVER_PORT);
-  tatl_send(listener_socket, LISTENER_REQUEST, CURRENT_USERNAME, strlen(CURRENT_USERNAME)+1);
+  tatl_send(listener_socket, LISTENER, CURRENT_USERNAME, strlen(CURRENT_USERNAME)+1);
 
   MESSAGE_TYPE type;
   //tchat chat;
@@ -117,6 +118,7 @@ void* tatl_chat_listener (void* arg) {
   pthread_exit(NULL);
 }
 
+
 void tatl_spawn_chat_listener () {
   pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, NULL); 
 }
@@ -125,6 +127,39 @@ void tatl_join_chat_listener () {
   pthread_join(TATL_LISTENER_THREAD, NULL);  
 }
 
+// Request entering a room
+int tatl_join_room (const char* roomname, const char* username) {
+  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
+    return -1;
+  }
+
+  int msg_size = strlen(username) + strlen(roomname) + 2;
+  char* msg = malloc(sizeof(char)*msg_size);
+  memset(msg, 0, msg_size);
+  sprintf(msg, "%s:%s", roomname, username);
+  tatl_send(TATL_SOCK, JOIN_ROOM, msg, msg_size);
+
+  MESSAGE_TYPE type = DENIAL;
+  tatl_receive(TATL_SOCK, &type, msg, 1024);
+  
+  if (type == CONFIRMATION) {
+    tatl_spawn_chat_listener();
+    return 0;
+  } else if (type == AUTHENTICATION) {
+    if (authentication_function) {
+      return authentication_function(msg);
+    } else {
+      return -1;
+    }
+  } else {
+    tatl_set_error(msg);
+    return -1;
+  }  
+}
+ 
+
+
+/*
 // Request creation of a chat room
 int tatl_request_new_room (const char* roomname) {
   if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
@@ -144,32 +179,7 @@ int tatl_request_new_room (const char* roomname) {
     return -1;
   }
 }
-
-// Request entering a room
-int tatl_enter_room (const char* roomname) {
-  if (tatl_sanity_check(CLIENT, LOGGED_IN)) {
-    return -1;
-  }
-
-  tatl_send(TATL_SOCK, ENTER_ROOM_REQUEST, roomname, strlen(roomname)+1);
-  MESSAGE_TYPE type = DENIAL;
-  char msg [1024];
-  tatl_receive(TATL_SOCK, &type, msg, 1024);
-  
-  if (type == CONFIRMATION) {
-    tatl_spawn_chat_listener();
-    return 0;
-  } else if (type == AUTHENTICATION) {
-    if (authentication_function) {
-      return authentication_function(msg);
-    } else {
-      return -1;
-    }
-  } else {
-    tatl_set_error(msg);
-    return -1;
-  }  
-}
+*/
 
 // Send a chat to the current chatroom
 int tatl_chat (const char* message) {
@@ -195,11 +205,12 @@ int tatl_leave_room () {
     return -1;
   }
   
-  tatl_send(TATL_SOCK, LEAVE_ROOM_REQUEST, NULL, 0);
+  tatl_send(TATL_SOCK, LEAVE_ROOM, NULL, 0);
   tatl_join_chat_listener();
   return 0;
 }
 
+/*
 // Ask for a list of the members of the current chatroom
 // Returns a list of comma separated names
 // TODO : not allow commas in names
@@ -214,6 +225,7 @@ int tatl_request_room_members (char* names) {
 
   return 0;
 }
+*/
 
 int tatl_request_rooms (char* rooms) {
   return 0;

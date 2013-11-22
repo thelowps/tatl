@@ -1,4 +1,5 @@
-/* tatl.c
+/* 
+ * tatl_core.c 
  *
  * Written by David Lopes
  * University of Notre Dame, 2013
@@ -10,43 +11,93 @@
 #include "eztcp.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 TATL_MODE CURRENT_MODE = NOT_INITIALIZED;
 char TATL_ERROR [1024] = {0};
 int TATL_USE_AUTHENTICATION = 0;
 
-// TODO: explicitly state sizes expected for functions
-void tatl_serialize_chat (char* serialized, tchat chat) {
-  int chat_len = strlen(chat.message);
-  sprintf(serialized, "%d %s %s", chat_len, chat.message, chat.sender);
-}
-
-void tatl_deserialize_chat (char* serialized, tchat* chat) {
-  int chat_len;
-  sscanf(serialized, "%d", &chat_len);
-  char* msg = serialized+2;
-  strncpy(chat->message, msg, chat_len+1);
-  char* sender = msg + chat_len + 2;
-  strcpy(chat->sender, sender);
-}
-
-int tatl_send (int socket, MESSAGE_TYPE message_type, const void* message, int size) {
+// Send a null terminated string over the network
+int tatl_send (int socket, const char* message) {
   int bytes_sent = 0;
-  bytes_sent += ezsend(socket, &message_type, sizeof(int));
-  bytes_sent += ezsend(socket, &size, sizeof(int));
-  if (size > 0) bytes_sent += ezsend(socket, message, size);
+  int msg_size = strlen(message)+1;
+  bytes_sent += ezsend(socket, &msg_size, sizeof(int));
+  bytes_sent += ezsend(socket, message, msg_size);
   return bytes_sent;
 }
 
-int tatl_receive (int socket, MESSAGE_TYPE* message_type, void* message, int size) {
+// Receive a null-terminated string over the networks
+int tatl_receive (int socket, char** message) {
   // TODO : make the size parameter actually matter
   int message_size = 0;
-  if (ezreceive(socket, message_type, sizeof(int)) <= 0) return -1;
+  // TODO : send and receive message in network byte order
   if (ezreceive(socket, &message_size, sizeof(int)) <= 0) return -1;
-  if (message_size > 0) {
-    if (ezreceive(socket, message, message_size) <= 0) return -1;
-  }
+  *message = malloc(sizeof(char) * message_size);
+  if (ezreceive(socket, *message, message_size) <= 0) return -1;
   return message_size;
+}
+
+// TODO: explicitly state sizes expected for functions
+int tatl_receive_protocol (int socket, tmsg* msg) {
+  char* raw_msg;
+  char type;
+  int msg_size = tatl_receive(socket, &raw_msg);
+  if (msg_size < 0) return -1;
+  char* raw_temp = raw_msg;
+  type = raw_msg[0];
+  raw_msg++;
+  
+  if (type == 'J') {
+    msg->type = JOIN_ROOM;
+    strcpy(msg->roomname, strtok(raw_msg, ":"));
+    strcpy(msg->username, strtok(NULL, ":"));
+  } else if (type == 'E') {
+    msg->type = LEAVE_ROOM;
+  } else if (type == 'S') {
+    msg->type = SUCCESS;
+  } else if (type == 'F') {
+    msg->type = FAILURE;
+    strcpy(msg->message, raw_msg);
+  } else if (type == 'L') {
+    msg->type = LIST;
+  } else if (type == 'T') {
+    msg->type = CHAT;
+    strcpy(msg->roomname, strtok(raw_msg, ":"));
+    strcpy(msg->username, strtok(NULL, ":"));
+    strcpy(msg->message, strtok(NULL, ":"));
+  } else if (type == 'I') {
+    msg->type = ID;
+    strcpy(msg->message, raw_msg);
+  } else if (type == 'N') {
+    msg->type = LISTENER;
+    strcpy(msg->message, raw_msg);
+  }
+  free(raw_temp);
+  return 0;
+}
+
+void tatl_send_protocol (int socket, tmsg* msg) {
+  // TODO: sizing
+  char* raw_msg = malloc(sizeof(char) * 2056);
+  if (msg->type == JOIN_ROOM) {
+    sprintf(raw_msg, "J%s:%s", msg->roomname, msg->username);
+  } else if (msg->type == LEAVE_ROOM) {
+    sprintf(raw_msg, "E");
+  } else if (msg->type == SUCCESS) {
+    sprintf(raw_msg, "S");
+  } else if (msg->type == FAILURE) {
+    sprintf(raw_msg, "F%s", msg->message);
+  } else if (msg->type == LIST) {
+    sprintf(raw_msg, "L");
+  } else if (msg->type == CHAT) {
+    sprintf(raw_msg, "T%s:%s:%s", msg->roomname, msg->username, msg->message);
+  } else if (msg->type == ID) {
+    sprintf(raw_msg, "I%s", msg->message);
+  } else if (msg->type == LISTENER) {
+    sprintf(raw_msg, "N%s", msg->message);
+  }
+  tatl_send(socket, raw_msg);
+  free(raw_msg);
 }
 
 void tatl_set_error (const char* error) {

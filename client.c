@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-void handle_chat (char* chat) {
-  printf("%s\n", chat);
+void handle_chat (tchat chat) {
+  printf("%s: %s\n", chat.sender, chat.message);
 }
 
 int authenticate_self (char* gatekeeper) {
@@ -20,6 +20,7 @@ int authenticate_self (char* gatekeeper) {
   // Receive room key, decrypt
   // Store room key
   // return 0
+  printf("Authenticating self...\n");
   return 0;
 }
 
@@ -30,61 +31,54 @@ int authenticate_other (char* knocker) {
   // Random number exchange
   // Encrypt room key, send
   // return 0
+  printf("Authenticating someone else...\n");
   return 0;
+}
+
+int get_user_input (char* inp, size_t n, const char* prompt) {
+  printf("%s", prompt);
+  int chars = getline(&inp, &n, stdin);
+  if (inp[chars-1] == '\n') {
+    inp[chars-1] = 0;
+  }
+  return chars;
 }
 
 int main (int argc, char* argv[]) {
   
-  if (argc < 2) {
-    printf("Usage: client <username>.\n");
-    return 1;
-  }
+  size_t n = 2056;
+  char* input = malloc(sizeof(char) * n);
 
-  tatl_init_client (TATL_DEFAULT_SERVER_IP, TATL_DEFAULT_SERVER_PORT, 0);
-  if (tatl_login(argv[1])) {
-    tatl_print_error("CLIENT: Error logging in");
-    return 1;
-  }
+  tatl_init_client(TATL_DEFAULT_SERVER_IP, TATL_DEFAULT_SERVER_PORT, 0);
   tatl_set_chat_listener(handle_chat);
+  tatl_set_gatekeeper_function(authenticate_other);
+  tatl_set_authentication_function(authenticate_self);
   
-  printf("CLIENT: logged in!\n");
+  printf("-- Welcome to the most basic of chat clients.   --\n");
+  printf("-- Should you find anything not to your liking, --\n");
+  printf("-- please send your complaints to /dev/null.    --\n");
 
-  const char* names [3] = {"three", "four", "seven"};
-  
-  int i;
-  for (i = 0; i < 3; ++i) {
-    // Enter the next room
-    printf("CLIENT: Attempting to log into room %s...\n", names[i]);
-    if (tatl_request_new_room(names[i])) {
-      if (tatl_enter_room(names[i])) {
-	tatl_print_error("CLIENT: Failure to enter room");
-	continue;
-      }
+  // TODO: not allow inputs with spaces
+  while(1) {
+    char roomname [TATL_MAX_ROOMNAME_SIZE];
+    get_user_input(input, n, "-- Enter the name of the chatroom you wish to enter: ");
+    strcpy(roomname, input);
+    get_user_input(input, n, "-- Enter your desired username: ");
+    if (tatl_join_room(roomname, input) < 0) {
+      tatl_print_error("-- Could not enter room");
+    } else {
+      break;
     }
-    
-    printf("CLIENT: Entered room %s!\n", names[i]);
-    char names [1024];
-    tatl_request_room_members(names);
-    printf("CLIENT: Room members are: %s\nCLIENT: Please chat to your heart's content.\n", names);
-    while (1) {
-      char* chat = malloc(sizeof(char) * 1024);
-      size_t n = 1024;
-      int chars = getline(&chat, &n, stdin);
-      if (chat[chars-1] == '\n') {
-	chat[chars-1] = 0;
-      }
-
-      if (strcmp(chat, "quit") == 0) {
-	tatl_leave_room();
-	break;
-      } else {
-	tatl_chat(chat);
-      }
-
-      free(chat);
-    }
-
   }
-  
+
+  printf("-- You have succesfully entered the room.       --\n");
+  //char room_members [2056];
+  //tatl_request_room_members(room_members);
+  //printf("-- Current room members are: %s\n", room_members);
+  printf("-- The floor is yours.\n");
+  while(get_user_input(input, n, "")) {
+    tatl_chat(input);
+  }
+
   return 0;
 }

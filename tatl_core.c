@@ -72,6 +72,7 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     msg->type = CHAT;
     strcpy(msg->roomname, strtok(raw_msg, ":"));
     strcpy(msg->username, strtok(NULL, ":"));
+    sscanf(strtok(NULL, ":"), "%d", &(msg->message_id));
     strcpy(msg->message, strtok(NULL, ":"));
   } else if (type == 'I') {
     msg->type = ID;
@@ -100,7 +101,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == GROUPS) {
     sprintf(raw_msg, "G%d %s", msg->amount_rooms, msg->message);
   } else if (msg->type == CHAT) {
-    sprintf(raw_msg, "T%s:%s:%s", msg->roomname, msg->username, msg->message);
+    sprintf(raw_msg, "T%s:%s:%u:%s", msg->roomname, msg->username, msg->message_id, msg->message);
   } else if (msg->type == ID) {
     sprintf(raw_msg, "I%s", msg->message);
   } else if (msg->type == LISTENER) {

@@ -24,6 +24,7 @@ TATL_CLIENT_STATUS CURRENT_CLIENT_STATUS = NOT_IN_ROOM;
 char CURRENT_USERNAME [TATL_MAX_USERNAME_SIZE] = {0};
 char CURRENT_ROOM [TATL_MAX_ROOMNAME_SIZE] = {0};
 int  CURRENT_USER_ID = -1;
+unsigned int CURRENT_CHAT_ID = 0;
 
 // Function to be called when a chat message from others in the room is received
 void (*listener_function)(tchat chat);
@@ -158,6 +159,7 @@ int tatl_chat (const char* message) {
   strcpy(msg.message, message);
   strcpy(msg.username, CURRENT_USERNAME);
   strcpy(msg.username, CURRENT_ROOM);
+  msg.message_id = CURRENT_CHAT_ID++;
   tatl_send_protocol(TATL_SOCK, &msg);
   return 0;
 }

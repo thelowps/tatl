@@ -82,6 +82,7 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     strcpy(msg->message, raw_msg);
   } else if (type == 'H') {
     msg->type = HEARTBEAT;
+    strcpy(msg->message, raw_msg);
   }
   free(raw_temp);
   return 0;
@@ -109,7 +110,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == LISTENER) {
     sprintf(raw_msg, "N%s", msg->message);
   } else if (msg->type == HEARTBEAT) {
-    sprintf(raw_msg, "H%s:%s", msg->);
+    sprintf(raw_msg, "H%s:%s", msg->message);
   }
   tatl_send(socket, raw_msg);
   free(raw_msg);

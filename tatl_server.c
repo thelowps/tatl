@@ -27,6 +27,7 @@ typedef struct {
   int port;
   int socket;
   int listener_socket;
+  int heartbeat;
 } userdata;
 
 typedef struct {
@@ -264,7 +265,7 @@ int tatl_send_rooms (userdata* user) {
 int tatl_remove_from_room (userdata* user) {
   // Update room information
   if (*(user->room)) {
-    roomdata* room = tatl_get_roomdata(user->room);
+    roomdata* room = tatl_fetch_roomdata(user->room);
     tatl_remove_user_from_room(user, room);
     user->room[0] = 0;
 
@@ -322,6 +323,7 @@ userdata* tatl_create_userdata (int socket) {
   user->room[0] = 0;
   user->socket = socket;
   user->listener_socket = 0;
+  user->heartbeat = 1;
   ezsocketdata(socket, (char*)&(user->ip_address), &(user->port));
 
   char key [20];

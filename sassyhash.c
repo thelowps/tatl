@@ -153,6 +153,35 @@ void sh_for_each (shash_t map, void (*to_do)(const char* key, void* value, int v
 
 
 //
+// sh_at
+//
+// Finds the ith element in the map
+// RETURNS: 1 if the element was found, 0 if not
+int sh_at (shash_t map, int i, void* value, int max_size) {
+  int j, found = 0, count = 0;
+  struct node* n = NULL;
+  for (j = 0; j < map->SIZE && !found; ++j) {
+    n = map->TABLE[j];
+    while (n) {
+      if (count == i) {
+	found = 1;
+	break;
+      }
+      ++count;
+      n = n->next;
+    }
+  }
+
+  if (found) {
+    int size_to_copy = max_size > n->value_size ? n->value_size : max_size;
+    memcpy(value, n->value, size_to_copy);
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+//
 // sh_print
 //
 // Prints the map's contents to standard output

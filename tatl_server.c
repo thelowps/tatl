@@ -112,6 +112,7 @@ void      tatl_destroy_roomdata (roomdata* room);
 
 // Prototypes for use in the main loop
 int tatl_place_in_room     (tmsg* msg, userdata* user);
+int tatl_send_rooms        (userdata* user);
 int tatl_remove_from_room  (userdata* user);
 int tatl_user_chatted      (tmsg* msg, userdata* user);
 int tatl_logout_user       (userdata* user);
@@ -146,7 +147,7 @@ void* tatl_handle_new_connection (void* arg) {
     } else if (msg.type == CHAT) {
       tatl_user_chatted(&msg, user);
     } else if (msg.type == LIST) {
-      //tatl_send_room_members(user);
+      tatl_send_rooms(user);
     } else if (msg.type == LOGOUT) {
       tatl_logout_user(user);
       return NULL;
@@ -193,7 +194,16 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
   tatl_add_user_to_room(room, user);
 
   resp.type = SUCCESS;
-  // TODO: send rooms and members
+  resp.message[0] = 0;
+  struct node* n = room->users_head;
+  while (n) {
+    userdata* u = *((userdata**)(n->value));
+    strcat(resp.message, u->name);
+    strcat(resp.message, ":");
+    strcat(resp.message, u->ip_address);
+    strcat(resp.message, ":");
+    n = n->next;
+  }
   tatl_send_protocol(user->socket, &resp);
 
   return 1;
@@ -225,26 +235,26 @@ int tatl_user_chatted (tmsg* msg, userdata* user) {
   return 1;
 }
 
-/*
-// Send a list of the room members to the given user
-int tatl_send_room_members (userdata* user) {
-  char names [(TATL_MAX_USERNAME_SIZE+1)*TATL_MAX_MEMBERS_PER_ROOM];
-  names[0] = 0;
+// Tell a user which rooms exist
+int tatl_send_rooms (userdata* user) {
+  tmsg resp;
+  resp.type = GROUPS;
+  resp.message[0] = 0;
 
   roomdata* room;
-  sh_get(ROOM_MAP, user.room, &room, sizeof(roomdata));
-  struct node* head = room.users_head;
-  while (head) {
-    strcat(names, head->key);
-    strcat(names, ",");
-    head = head->next;
+  int i = 0;  
+  while (sh_at(ROOM_MAP, i, &room, sizeof(room))) {
+    printf("Adding room %s to list.\n", room->name);
+    strcat(resp.message, room->name);
+    strcat(resp.message, ":");
+    ++i;
   }
+  resp.amount_rooms = i;
 
-  tatl_send(user.socket, CONFIRMATION, names, strlen(names)+1);
-
+  printf("Sending full message: %s\n", resp.message);
+  tatl_send_protocol(user->socket, &resp);
   return 1;
 }
-*/
 
 // Remove a user from whatever room he is in
 int tatl_remove_from_room (userdata* user) {

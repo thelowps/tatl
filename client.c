@@ -56,7 +56,20 @@ int main (int argc, char* argv[]) {
   
   printf("-- Welcome to the most basic of chat clients.   --\n");
   printf("-- Should you find anything not to your liking, --\n");
-  printf("-- please send your complaints to /dev/null.    --\n");
+  printf("-- please send your complaints to /dev/null.    --\n\n");
+
+  char room_data [2056], rooms[2056] = {0}, members[2056] = {0};
+  tatl_request_rooms(room_data);
+  char* tok = strtok(room_data, ":");
+  if (tok) {
+    strcat(rooms, tok);
+    while ((tok = strtok(NULL,":"))) {
+      strcat(rooms, ", ");
+      strcat(rooms, tok);
+    }
+  }
+  printf("-- EXISTING CHATROOMS: %s\n", rooms);
+
 
   // TODO: not allow inputs with spaces
   while(1) {
@@ -64,17 +77,15 @@ int main (int argc, char* argv[]) {
     get_user_input(input, n, "-- Enter the name of the chatroom you wish to enter: ");
     strcpy(roomname, input);
     get_user_input(input, n, "-- Enter your desired username: ");
-    if (tatl_join_room(roomname, input) < 0) {
+    if (tatl_join_room(roomname, input, members) < 0) {
       tatl_print_error("-- Could not enter room");
     } else {
       break;
     }
   }
 
-  printf("-- You have succesfully entered the room.       --\n");
-  //char room_members [2056];
-  //tatl_request_room_members(room_members);
-  //printf("-- Current room members are: %s\n", room_members);
+  printf("-- You have succesfully entered the room.\n");
+  printf("-- Room members are: %s\n", members);
   printf("-- The floor is yours.\n");
   while(get_user_input(input, n, "")) {
     tatl_chat(input);

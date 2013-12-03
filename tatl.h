@@ -33,7 +33,8 @@ void tatl_print_error (const char* msg);
 
 // CLIENT //
 int  tatl_init_client (const char* server_ip, int server_port, int flags);
-int  tatl_join_room (const char* roomname, const char* username);
+int  tatl_request_rooms (char* rooms);
+int  tatl_join_room (const char* roomname, const char* username, char* members);
 int  tatl_leave_room ();
 int  tatl_chat (const char* chat);
 

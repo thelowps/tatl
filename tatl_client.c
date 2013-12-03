@@ -66,11 +66,13 @@ int tatl_init_client (const char* server_ip, int server_port, int flags) {
     return -1;
   }
   
+  // Set flags
   CURRENT_MODE = CLIENT;
 
   strcpy(TATL_SERVER_IP, server_ip);
   TATL_SERVER_PORT = server_port;
 
+  // Receive ID
   tmsg msg;
   tatl_receive_protocol(TATL_SOCK, &msg);
   sscanf(msg.message, "%d", &CURRENT_USER_ID);  
@@ -112,7 +114,7 @@ void tatl_join_chat_listener () {
 }
 
 // Request entering a room
-int tatl_join_room (const char* roomname, const char* username) {
+int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (tatl_sanity_check(CLIENT, NOT_IN_ROOM)) {
     return -1;
   }
@@ -129,6 +131,7 @@ int tatl_join_room (const char* roomname, const char* username) {
     tatl_spawn_chat_listener();
     CURRENT_CLIENT_STATUS = IN_ROOM;
     strcpy(CURRENT_ROOM, roomname);
+    strcpy(members, msg.message);
     return 0;
   } else if (msg.type == AUTHENTICATION) {
     if (authentication_function) {
@@ -147,6 +150,9 @@ int tatl_join_room (const char* roomname, const char* username) {
 int tatl_chat (const char* message) {
   if (tatl_sanity_check(CLIENT, IN_ROOM)) return -1;
   
+  if (!(*message)) return 0; // Do not send an empty chat
+  if (*message == '\n') return 0; // Do not send a single newline
+
   tmsg msg;
   msg.type = CHAT;
   strcpy(msg.message, message);
@@ -171,6 +177,16 @@ int tatl_leave_room () {
   return 0;
 }
 
+// Request a list of the rooms
 int tatl_request_rooms (char* rooms) {
-  return 0;
+  if (tatl_sanity_check(CLIENT, NOT_IN_ROOM)) return -1;
+  
+  tmsg msg;
+  msg.type = LIST;
+  tatl_send_protocol(TATL_SOCK, &msg);
+
+  tatl_receive_protocol(TATL_SOCK, &msg);
+  strcpy(rooms, msg.message);
+  return msg.amount_rooms;
 }
+

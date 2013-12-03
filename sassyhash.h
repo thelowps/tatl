@@ -63,6 +63,9 @@ int  sh_remove (shash_t map, const char* key);
 int  sh_exists (shash_t map, const char* key);
 
 
+// Returns the ith element in the hash.
+int  sh_at (shash_t map, int i, void* value, int max_size);
+
 // For debugging. If 'full' is not 0, prints a visualization of the buckets each
 // key-value pair is in. 'print' is used as the function to print out values (since
 // sassyhash is value-type agnostic). If 'print' is null, it assumes the values are 

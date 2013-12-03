@@ -55,11 +55,19 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     msg->type = LEAVE_ROOM;
   } else if (type == 'S') {
     msg->type = SUCCESS;
+    strcpy(msg->message, raw_msg);
   } else if (type == 'F') {
     msg->type = FAILURE;
     strcpy(msg->message, raw_msg);
   } else if (type == 'L') {
     msg->type = LIST;
+  } else if (type == 'G') {
+    msg->type = GROUPS;
+    msg->message[0] = 0;
+    sscanf(raw_msg, "%d", &(msg->amount_rooms));
+    if (msg->amount_rooms) {
+      sscanf(raw_msg, "%d %s", &(msg->amount_rooms), msg->message);
+    }
   } else if (type == 'T') {
     msg->type = CHAT;
     strcpy(msg->roomname, strtok(raw_msg, ":"));
@@ -84,11 +92,13 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == LEAVE_ROOM) {
     sprintf(raw_msg, "E");
   } else if (msg->type == SUCCESS) {
-    sprintf(raw_msg, "S");
+    sprintf(raw_msg, "S%s", msg->message);
   } else if (msg->type == FAILURE) {
     sprintf(raw_msg, "F%s", msg->message);
   } else if (msg->type == LIST) {
     sprintf(raw_msg, "L");
+  } else if (msg->type == GROUPS) {
+    sprintf(raw_msg, "G%d %s", msg->amount_rooms, msg->message);
   } else if (msg->type == CHAT) {
     sprintf(raw_msg, "T%s:%s:%s", msg->roomname, msg->username, msg->message);
   } else if (msg->type == ID) {

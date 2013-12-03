@@ -32,6 +32,7 @@ typedef struct {
 typedef struct {
   char name [TATL_MAX_ROOMNAME_SIZE];
   struct node* users_head;
+  struct node* heartbeats_head; // TODO : put this in
 } roomdata;
 
 shash_t USER_MAP = NULL;
@@ -65,10 +66,10 @@ int tatl_init_server (int port, int flags) {
     return -1;
   }
   CURRENT_MODE = SERVER;
-
+  
   USER_MAP = sh_create_map(0);
   ROOM_MAP = sh_create_map(0);
-
+  
   ezlisten(&TATL_SOCK, port);
   return 0;
 }
@@ -117,6 +118,7 @@ int tatl_remove_from_room  (userdata* user);
 int tatl_user_chatted      (tmsg* msg, userdata* user);
 int tatl_logout_user       (userdata* user);
 int tatl_setup_listener    (tmsg* msg, userdata* user);
+int tatl_handle_heartbeat  (userdata* user);
 
 // Main client handler
 void* tatl_handle_new_connection (void* arg) {
@@ -154,6 +156,8 @@ void* tatl_handle_new_connection (void* arg) {
     } else if (msg.type == LISTENER) {
       tatl_setup_listener(&msg, user);
       return NULL;
+    } else if (msg.type == HEARTBEAT) {
+      
     }
 
 #ifdef DEBUG
@@ -260,9 +264,8 @@ int tatl_send_rooms (userdata* user) {
 int tatl_remove_from_room (userdata* user) {
   // Update room information
   if (*(user->room)) {
-    roomdata* room;
-    sh_get(ROOM_MAP, user->room, &room, sizeof(room));
-    ll_delete_key(&(room->users_head), user->name);
+    roomdata* room = tatl_get_roomdata(user->room);
+    tatl_remove_user_from_room(user, room);
     user->room[0] = 0;
 
     // If the room is now empty, delete it
@@ -366,6 +369,7 @@ void tatl_add_user_to_room (roomdata* room, userdata* user) {
 
 void tatl_remove_user_from_room (roomdata* room, userdata* user) {
   ll_delete_key(&(room->users_head), user->name);
+  user->room[0] = 0;
 }
 
 userdata* tatl_get_user_in_room (roomdata* room, const char* username) {

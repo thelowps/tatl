@@ -128,7 +128,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
 
   tatl_receive_protocol(TATL_SOCK, &msg);
   
-  if (msg.type == SUCCESS) {
+  if (msg.type == SUCESS) {
     tatl_spawn_chat_listener();
     CURRENT_CLIENT_STATUS = IN_ROOM;
     strcpy(CURRENT_ROOM, roomname);

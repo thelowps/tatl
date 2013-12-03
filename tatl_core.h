@@ -26,7 +26,8 @@ typedef enum {
   SUCCESS,
   FAILURE,
   ID, 
-  LISTENER
+  LISTENER,
+  HEARTBEAT
 } MESSAGE_TYPE;
 
 typedef struct {

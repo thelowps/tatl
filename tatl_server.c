@@ -37,11 +37,6 @@ typedef struct {
   struct node* heartbeats_head; // TODO : put this in DO WE STILL NEED THIS?
 } roomdata;
 
-typedef struct {
-
-
-} threaddata;
-
 shash_t USER_MAP = NULL;
 shash_t ROOM_MAP = NULL;
 
@@ -134,7 +129,7 @@ int tatl_remove_from_room  (userdata* user);
 int tatl_user_chatted      (tmsg* msg, userdata* user);
 int tatl_logout_user       (userdata* user);
 int tatl_setup_listener    (tmsg* msg, userdata* user);
-int tatl_handle_heartbeat  (userdata* user);
+int tatl_handle_heartbeat  (tmsg* msg);
 
 // Main client handler
 void* tatl_handle_new_connection (void* arg) {
@@ -173,7 +168,7 @@ void* tatl_handle_new_connection (void* arg) {
       tatl_setup_listener(&msg, user);
       return NULL;
     } else if (msg.type == HEARTBEAT) {
-	tatl_handle_heartbeat(user);
+	tatl_handle_heartbeat(&msg);
       
     }
 
@@ -402,13 +397,10 @@ void tatl_destroy_roomdata (roomdata* room) {
   free(room);
 }
 
-int tatl_handle_heartbeat(userdata* user) {
-//get user's room
-//get the head of that room 
-//find the user 
-//set the heartbeat equal to 1
-
-
+int tatl_handle_heartbeat(tmsg* msg) {
+	roomdata* room = tatl_fetch_roomdata(msg->roomname);
+	userdata* user_to_update = tatl_get_user_in_room(room, msg->username);
+	user_to_update->heartbeat = 1;
 
 return 1;
 }

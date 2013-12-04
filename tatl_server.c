@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "tatl.h"
 #include "tatl_core.h"
@@ -33,8 +34,13 @@ typedef struct {
 typedef struct {
   char name [TATL_MAX_ROOMNAME_SIZE];
   struct node* users_head;
-  struct node* heartbeats_head; // TODO : put this in
+  struct node* heartbeats_head; // TODO : put this in DO WE STILL NEED THIS?
 } roomdata;
+
+typedef struct {
+
+
+} threaddata;
 
 shash_t USER_MAP = NULL;
 shash_t ROOM_MAP = NULL;
@@ -61,6 +67,8 @@ void tatl_set_use_authentication (int use_authentication) {
   TATL_USE_AUTHENTICATION = use_authentication;
 }
 
+
+void* tatl_client_monitor(void * arg);
 int tatl_init_server (int port, int flags) {
   if (CURRENT_MODE != NOT_INITIALIZED) {
     tatl_set_error("Already initialized.");
@@ -70,9 +78,16 @@ int tatl_init_server (int port, int flags) {
   
   USER_MAP = sh_create_map(0);
   ROOM_MAP = sh_create_map(0);
+
+  pthread_t thread;
+  
+  //create thread that kicks dead clients out every 2 minutes 
+  pthread_create(&thread, NULL, tatl_client_monitor, &ROOM_MAP);
+  //do I need to call a pthread_join?
   
   ezlisten(&TATL_SOCK, port);
   return 0;
+
 }
 
 void* tatl_handle_new_connection (void* arg);
@@ -158,6 +173,7 @@ void* tatl_handle_new_connection (void* arg) {
       tatl_setup_listener(&msg, user);
       return NULL;
     } else if (msg.type == HEARTBEAT) {
+	tatl_handle_heartbeat(user);
       
     }
 
@@ -266,7 +282,7 @@ int tatl_remove_from_room (userdata* user) {
   // Update room information
   if (*(user->room)) {
     roomdata* room = tatl_fetch_roomdata(user->room);
-    tatl_remove_user_from_room(user, room);
+    tatl_remove_user_from_room(room, user);
     user->room[0] = 0;
 
     // If the room is now empty, delete it
@@ -384,4 +400,45 @@ void tatl_destroy_roomdata (roomdata* room) {
   ll_delete_list(room->users_head);
   sh_remove(ROOM_MAP, room->name);
   free(room);
+}
+
+int tatl_handle_heartbeat(userdata* user) {
+//get user's room
+//get the head of that room 
+//find the user 
+//set the heartbeat equal to 1
+
+
+
+return 1;
+}
+
+void * tatl_client_monitor(void *arg) {
+shash_t ROOM_MAP = *((shash_t*)arg); 
+
+while(1){
+	usleep(2000000);
+	int i = 0;
+	roomdata* room;
+	int heartbeat;
+
+	while(sh_at(ROOM_MAP, i, &room, sizeof(room))){  
+		struct node* n = room->users_head;
+		while(n) {
+			userdata* u =  *((userdata**)(n->value));
+			heartbeat = u->heartbeat;
+			if(heartbeat == 0) {
+				tatl_remove_user_from_room(room, u);
+			}
+			else if(heartbeat == 1) {
+				u->heartbeat = 0;
+			}
+			n=n->next;
+
+
+		}
+	}
+}
+
+return 0;
 }

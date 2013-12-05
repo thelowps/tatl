@@ -28,13 +28,13 @@ typedef struct {
   int port;
   int socket;
   int listener_socket;
-  int heartbeat;
 } userdata;
 
 typedef struct {
   char name [TATL_MAX_ROOMNAME_SIZE];
   struct node* users_head;
-  struct node* heartbeats_head; // TODO : put this in DO WE STILL NEED THIS?
+  shash_t HEARTBEAT_MAP; 
+  //struct node* heartbeats_head; // TODO : put this in 
 } roomdata;
 
 shash_t USER_MAP = NULL;
@@ -56,6 +56,7 @@ void tatl_print_roomdata (void* value, char* str) {
     head = head->next;
   }
   sprintf(str, "[name:%s, users:%s]", data->name, users);
+
 }
 
 void tatl_set_use_authentication (int use_authentication) {
@@ -115,7 +116,7 @@ userdata* tatl_fetch_userdata   (int socket);
 void      tatl_destroy_userdata (int socket);
 
 // Entry points to handling room data
-roomdata* tatl_create_roomdata (const char* roomname);
+roomdata* tatl_create_roomdata (const char* roomname, const char* username);
 roomdata* tatl_fetch_roomdata (const char* roomname);
 void      tatl_add_user_to_room (roomdata* room, userdata* user);
 void      tatl_remove_user_from_room (roomdata* room, userdata* user);
@@ -192,7 +193,7 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
   // Get room data
   roomdata* room;
   if (!(room = tatl_fetch_roomdata(msg->roomname))) {
-    room = tatl_create_roomdata(msg->roomname);
+    room = tatl_create_roomdata(msg->roomname, msg->username);
   }
   
   // Check if that name is already in use within that room
@@ -259,7 +260,7 @@ int tatl_send_rooms (userdata* user) {
 
   roomdata* room;
   int i = 0;  
-  while (sh_at(ROOM_MAP, i, &room, sizeof(room))) {
+  while (sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))) {
     printf("Adding room %s to list.\n", room->name);
     strcat(resp.message, room->name);
     strcat(resp.message, ":");
@@ -334,7 +335,6 @@ userdata* tatl_create_userdata (int socket) {
   user->room[0] = 0;
   user->socket = socket;
   user->listener_socket = 0;
-  user->heartbeat = 1;
   ezsocketdata(socket, (char*)&(user->ip_address), &(user->port));
 
   char key [20];
@@ -362,11 +362,15 @@ void tatl_destroy_userdata (int socket) {
   }
 }
 
-roomdata* tatl_create_roomdata (const char* roomname) {
+roomdata* tatl_create_roomdata (const char* roomname, const char* username) {
   roomdata* room = malloc(sizeof(roomdata));
+  shash_t heartbeat_map = sh_create_map();
   strcpy(room->name, roomname);
   room->users_head = NULL;
   sh_set(ROOM_MAP, roomname, &room, sizeof(room));
+  room->HEARTBEAT_MAP = heartbeat_map;
+  int heartbeat = 1;
+  sh_set(room->HEARTBEAT_MAP, username, &heartbeat, sizeof(heartbeat));
   return room;
 }
 
@@ -399,8 +403,8 @@ void tatl_destroy_roomdata (roomdata* room) {
 
 int tatl_handle_heartbeat(tmsg* msg) {
 	roomdata* room = tatl_fetch_roomdata(msg->roomname);
-	userdata* user_to_update = tatl_get_user_in_room(room, msg->username);
-	user_to_update->heartbeat = 1;
+	int heartbeat = 1;
+	sh_set(room->HEARTBEAT_MAP, msg->username, &heartbeat, sizeof(heartbeat)); 
 
 return 1;
 }
@@ -408,29 +412,33 @@ return 1;
 void * tatl_client_monitor(void *arg) {
 shash_t ROOM_MAP = *((shash_t*)arg); 
 
+
 while(1){
-	usleep(2000000);
+	usleep(1200000000); 
 	int i = 0;
+	int j = 0;
 	roomdata* room;
 	int heartbeat;
+	char* user = malloc(sizeof(TATL_MAX_USERNAME_SIZE));
+	int reset = 0;
+        
 
-	while(sh_at(ROOM_MAP, i, &room, sizeof(room))){  
-		struct node* n = room->users_head;
-		while(n) {
-			userdata* u =  *((userdata**)(n->value));
-			heartbeat = u->heartbeat;
+	while(sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))){   
+		while(sh_at(room->HEARTBEAT_MAP, j, user, &heartbeat, sizeof(heartbeat))){ 
 			if(heartbeat == 0) {
-				tatl_remove_user_from_room(room, u);
+				//have to delete given the key
+				sh_remove(room->HEARTBEAT_MAP, user);
 			}
 			else if(heartbeat == 1) {
-				u->heartbeat = 0;
+				//set it to zero, need the key to set 
+				sh_set(room->HEARTBEAT_MAP, user, &reset, sizeof(reset));
 			}
-			n=n->next;
-
+			++j;
 
 		}
+		++i;
 	}
 }
 
 return 0;
-}
+} 

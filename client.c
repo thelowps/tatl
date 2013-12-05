@@ -1,4 +1,5 @@
 #include "tatl.h"
+#include "vegCrypt.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -87,6 +88,7 @@ int main (int argc, char* argv[]) {
   printf("-- You have succesfully entered the room.\n");
   printf("-- Room members are: %s\n", members);
   printf("-- The floor is yours.\n");
+
   while(get_user_input(input, n, "")) {
     tatl_chat(input);
   }

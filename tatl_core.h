@@ -8,6 +8,7 @@
 
 #include "tatl.h"
 #include "eztcp.h"
+#include "vegCrypt.h"
 
 typedef enum {
   NOT_INITIALIZED, 
@@ -45,6 +46,7 @@ typedef struct {
   char roomname [TATL_MAX_ROOMNAME_SIZE+1];
   unsigned int message_id;
   char message [TATL_MAX_CHAT_SIZE+1];
+  int message_size;
   
   tuser members [TATL_MAX_MEMBERS_PER_ROOM+1];
   int amount_members;

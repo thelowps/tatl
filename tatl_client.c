@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <gmp.h>
 
 #define DEBUG
@@ -45,9 +46,11 @@ unsigned char CURRENT_PASS_HASH [32];
 // Function to be called when a chat message from others in the room is received
 void (*listener_function)(tchat chat);
 pthread_t TATL_LISTENER_THREAD;
+pthread_t TATL_HEARTBEAT_THREAD;
 void tatl_set_chat_listener (void (*listen)(tchat chat)) {
   listener_function = listen;
 }
+
 
 // Functions to be called when entering a room requires authentication.
 // Should return 0 on success, -1 on failure
@@ -74,6 +77,29 @@ int tatl_sanity_check (TATL_MODE expected_mode, TATL_CLIENT_STATUS expected_stat
   return 0;
 }
 
+
+void* tatl_send_heartbeat (void* arg) {
+        tmsg msg;
+        msg.type = HEARTBEAT;
+	while(1){
+		usleep(550000000);
+       	        strcpy(msg.roomname, CURRENT_ROOM);
+                strcpy(msg.username, CURRENT_USERNAME);
+                tatl_send_protocol(TATL_SOCK, &msg); 
+		
+		
+	}
+
+return 0;
+}
+
+
+void tatl_spawn_heartbeat_sender() {
+  pthread_create(&TATL_HEARTBEAT_THREAD, NULL, tatl_send_heartbeat, NULL); 
+}
+
+
+
 int tatl_init_client (const char* server_ip, int server_port, int flags) {  
   if (tatl_sanity_check(NOT_INITIALIZED, NOT_IN_ROOM)) {
     return -1;
@@ -99,6 +125,7 @@ int tatl_init_client (const char* server_ip, int server_port, int flags) {
   tmsg msg;
   tatl_receive_protocol(TATL_SOCK, &msg);
   sscanf(msg.message, "%d", &CURRENT_USER_ID);  
+
 
   return 0;
 }
@@ -476,8 +503,8 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
     strcpy(CURRENT_ROOM, roomname);
     strcpy(CURRENT_USERNAME, username);
     strcpy(members, msg.message);
-    
     tatl_spawn_chat_listener();
+    tatl_spawn_heartbeat_sender();
     return 0;
   } else {
     return -1;
@@ -542,4 +569,8 @@ int tatl_request_rooms (char* rooms) {
   strcpy(rooms, msg.message);
   return msg.amount_rooms;
 }
+
+
+
+
 

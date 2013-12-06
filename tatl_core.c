@@ -152,7 +152,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == LISTENER) {
     sprintf(raw_msg, "N%s", msg->message);
   } else if (msg->type == HEARTBEAT) {
-    //sprintf(raw_msg, "H%s:%s", msg->);
+    sprintf(raw_msg, "H%s:%s", msg->roomname, msg->username); 
   } else if (msg->type == AUTHENTICATION) {
     sprintf(raw_msg, "A%u:", msg->message_size);
     msg_size = strlen(raw_msg) + msg->message_size + 1;
@@ -163,11 +163,8 @@ void tatl_send_protocol (int socket, tmsg* msg) {
     msg_size = strlen(raw_msg)+1;
   }
 
-  int sent = tatl_send(socket, raw_msg, msg_size);
-  if (sent != msg_size+sizeof(msg_size)) {
-    printf("WARNING: DID NOT SEND ENTIRE MESSAGE. Expected to send %d, sent %d\n",
-	   msg_size+sizeof(msg_size), sent);
-  }
+  tatl_send(socket, raw_msg, msg_size);
+
   free(raw_msg);
 }
 

@@ -14,6 +14,7 @@
 #include <gmp.h>
 
 #define DEBUG
+#define SEC_DEBUG
 
 // The socket to communicate with the server on
 int TATL_SOCK;
@@ -37,9 +38,9 @@ typedef struct {
 
 t_mult_group TATL_DEFAULT_MULT_GROUP;
 
-char CURRENT_AES_KEY [16];
-char CURRENT_MAC_KEY [32];
-char CURRENT_PASS_HASH [32];
+unsigned char CURRENT_AES_KEY [16];
+unsigned char CURRENT_MAC_KEY [32];
+unsigned char CURRENT_PASS_HASH [32];
 
 // Function to be called when a chat message from others in the room is received
 void (*listener_function)(tchat chat);
@@ -110,19 +111,22 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
   mpz_init(resp);
 
   // Send a random number and expect it +1 back
-  printf("Creating a random number from the state\n");
   mpz_urandomm(check, state, TATL_DEFAULT_MULT_GROUP.p);
   
-  printf("Calculated our random number: ");
+#ifdef SEC_DEBUG
+  printf("VERIFYING OTHER PARTY: Random number to send:\n");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
-  
+#endif  
+
   // "encrypt" our random number
   mpz_mul(check, check, gabh);
   mpz_mod(check, check, TATL_DEFAULT_MULT_GROUP.p);
-  printf("Encrypted our random number: ");
+#ifdef SEC_DEBUG
+  printf("VERIFYING OTHER PARTY: Encrypted random number:\n");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
+#endif
 
   // send it
   char* check_str = mpz_get_str(NULL, 10, check);
@@ -133,21 +137,32 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
 
   // Receive encrypted response
   tatl_receive_protocol(socket, &msg);
-  printf("Received encrypted number: \n%s\n\n", msg.message);
   mpz_set_str(resp, msg.message, 10);
+#ifdef SEC_DEBUG
+  printf("VERIFYING OTHER PARTY: Received encrypted number: \n%s\n\n", msg.message);
+#endif
   
   // Decrypt it
   mpz_mul(resp, resp, inverse);
   mpz_mod(resp, resp, TATL_DEFAULT_MULT_GROUP.p);
   
-  printf("Decrypted response. It is: \n");
+#ifdef SEC_DEBUG
+  printf("VERIFYING OTHER PARTY: Decrypted response: \n");
   mpz_out_str(stdout, 10, resp);
-
+  printf("\n\n");
+#endif
+  
   mpz_add_ui(check, check, 1);
   if (!mpz_cmp(check, resp)) {
-    printf("Wrong response from authenticator.\n\n");
+#ifdef SEC_DEBUG
+    printf("VERIFYING OTHER PARTY: The number expected was incorrect.\n\n");
+#endif
     return 0;
-  }
+  } 
+  
+#ifdef SEC_DEBUG
+  printf("VERIFYING OTHER PARTY: Party verified.\n\n");
+#endif
   return 1;
 }
 
@@ -160,21 +175,32 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
   // Receive the random number
   tatl_receive_protocol(socket, &msg);
   mpz_set_str(check, msg.message, 10);
+#ifdef SEC_DEBUG
   printf("IN SELF VERIFICATION: Received encrypted number:\n%s\n\n", msg.message);
+#endif
 
   mpz_mul(check, check, inverse);
   mpz_mod(check, check, TATL_DEFAULT_MULT_GROUP.p);
+#ifdef SEC_DEBUG
   printf("IN SELF VERIFICATION: Decrypted number:\n");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
+#endif
 
   // Encrypt and return the response * g^abh
   mpz_add_ui(resp, check, 1);    
+#ifdef SEC_DEBUG
+  printf("IN SELF VERICATION: Added 1 to the number received:\n");
+  mpz_out_str(stdout, 10, resp);
+  printf("\n\n");
+#endif
   mpz_mul(resp, resp, gabh);
   mpz_mod(resp, resp, TATL_DEFAULT_MULT_GROUP.p);
 
   char* resp_str = mpz_get_str(NULL, 10, resp);
-  printf("IN SELF VERIFICATION: sending response:\n%s\n\n", resp_str);
+#ifdef DEBUG
+  printf("IN SELF VERIFICATION: Sending response:\n%s\n\n", resp_str);
+#endif
   strcpy(msg.message, resp_str);
   msg.message_size = strlen(resp_str)+1;
   free(resp_str);
@@ -266,60 +292,94 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
     success = tatl_diffie_hellman_verify_party(socket, gabh, inverse, state);
   }
 
-  printf("\n\nFINISHED HANDSHAKE\n");
   if (success) {
+#ifdef SEC_DEBUG
     printf("Handshake successful!\n");
-    mpz_t enc_key;
-    mpz_init(enc_key);
+#endif
+    mpz_t enc_key, enc_mac_key;
+    mpz_inits(enc_key, enc_mac_key, NULL);
 
     if (initial) {
+#ifdef SEC_DEBUG
       printf("Sending key: ");
       int i;
       for (i = 0; i < 16; ++i) {
 	printf("%.2x", CURRENT_AES_KEY[i]);
       }
-      printf("\n");
+      printf("\nSending MAC key: ");
+      for (i = 0; i < 32; ++i) {
+	printf("%.2x", CURRENT_MAC_KEY[i]);
+      }
+      printf("\n\n");
+#endif
 
+      // encrypt the AES key
       mpz_import(enc_key, 16, 1, sizeof(char), 1, 0, CURRENT_AES_KEY);  
       mpz_mul(enc_key, enc_key, gabh);
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
       
+      // encrypt the MAC key
+      mpz_import(enc_mac_key, 32, 1, sizeof(char), 1, 0, CURRENT_MAC_KEY);
+      mpz_mul(enc_mac_key, enc_mac_key, gabh);
+      mpz_mod(enc_mac_key, enc_mac_key, TATL_DEFAULT_MULT_GROUP.p);      
+
       // Send the key! yay
       msg.type = AUTHENTICATION;
       char* enc_key_str = mpz_get_str(NULL, 10, enc_key);
-      strcpy(msg.message, enc_key_str);
-      msg.message_size = strlen(enc_key_str)+1;
+      char* enc_mac_key_str = mpz_get_str(NULL, 10, enc_mac_key);
+      sprintf(msg.message, "%s:%s", enc_key_str, enc_mac_key_str);
+      msg.message_size = strlen(msg.message)+1;
       tatl_send_protocol(socket, &msg);
-      printf("Encrypted key sent: %s\n\n", enc_key_str);
+#ifdef SEC_DEBUG
+      printf("Encrypted key sent as decimal: %s\n", enc_key_str);
+      printf("Encrypted MAC key sent as decimal: %s\n", enc_mac_key_str);
+#endif
       free(enc_key_str);
+      free(enc_mac_key_str);
 
     } else {
       tatl_receive_protocol(socket, &msg);
-      printf("Encrypted key received: %s\n\n", msg.message);
-      mpz_set_str(enc_key, msg.message, 10);
-      printf("Encrypted key: \n");
+      mpz_set_str(enc_key, strtok(msg.message, ":"), 10);
+      mpz_set_str(enc_mac_key, strtok(NULL, ":"), 10);
+#ifdef SEC_DEBUG
+      printf("Received Encrypted key in decimal: \n");
       mpz_out_str(stdout, 10, enc_key);
       printf("\n\n");
+#endif
+
+      // Decrypt the AES key
       mpz_mul(enc_key, enc_key, inverse);
-      printf("Inverse is: ");
-      mpz_out_str(stdout, 10, inverse);
-      printf("\n\n");
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
-      printf("Decrypted key: \n");
+      mpz_export(CURRENT_AES_KEY, NULL, 1, sizeof(char), 1, 0, enc_key);     
+ 
+      // Decrypt the MAC key
+      mpz_mul(enc_mac_key, enc_mac_key, inverse);
+      mpz_mod(enc_mac_key, enc_mac_key, TATL_DEFAULT_MULT_GROUP.p);
+      mpz_export(CURRENT_MAC_KEY, NULL, 1, sizeof(char), 1, 0, enc_mac_key);
+
+#ifdef SEC_DEBUG
+      printf("Decrypted key in decimal: \n");
       mpz_out_str(stdout, 10, enc_key);
       printf("\n\n");
-      size_t count;
-      mpz_export(CURRENT_AES_KEY, &count, 1, sizeof(char), 1, 0, enc_key);
- 
-      printf("exported %zd bytes. Key: ", count);
+      
+      printf("Decrypted key in hex: ");
       int i;
       for (i = 0; i < 16; ++i) {
 	printf("%.2x", CURRENT_AES_KEY[i]);
       }
-    }    
+      printf("\nDecrypted MAC key in hex: ");
+      for (i = 0; i < 32; ++i) {
+	printf("%.2x", CURRENT_MAC_KEY[i]);
+      }
+#endif
+    } 
+
     return 1;
+    
   } else {
-    printf("Handshake unsuccessful. Siberia, here we come!\n");
+#ifdef SEC_DEBUG
+    printf("Handshake unsuccessful.\n\n");
+#endif
     return 0;
   }
   
@@ -336,24 +396,31 @@ void* tatl_chat_listener (void* arg) {
   sprintf(msg.message, "%d", CURRENT_USER_ID);
   tatl_send_protocol(listener_socket, &msg);
 
-  int message_size;
   tchat chat;
+  int message_size;
   while (1) {  
+    memset(&msg, 0, sizeof(msg));
     message_size = tatl_receive_protocol(listener_socket, &msg);
     if (message_size < 0) {
       pthread_exit(NULL);
     } else if (msg.type == CHAT && listener_function) {
-      char* buf = NULL;
-      int success = deconstructMessage(CURRENT_AES_KEY, CURRENT_MAC_KEY, &buf, msg.message);
+#ifdef SEC_DEBUG
+      printf("\n\nReceived message from room: %s\nSender: %s\nSize: %d\nCiphertext: ",
+	     msg.roomname, msg.username, msg.message_size);
+      tatl_print_hex(msg.message, msg.message_size);
+      printf("\n");
+#endif
+      
+      char* buf = NULL;      
+      int success = deconstructMessage(CURRENT_AES_KEY, CURRENT_MAC_KEY, &buf, (unsigned char*)msg.message);
       
       if (!success) {
-	printf("Received a message with a Bad MAC\n");
-      } else {      
-	strcpy(chat.message, buf);
-	strcpy(chat.sender, msg.username);
-	listener_function(chat);	
+	printf("Received a message with a Bad MAC\n\n");
       }
-
+      strcpy(chat.message, buf);
+      strcpy(chat.sender, msg.username);
+      listener_function(chat);	
+      
       free(buf);
     } else if (msg.type == AUTHENTICATION) {
       tatl_diffie_hellman(listener_socket, &msg);      
@@ -394,6 +461,14 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
     tatl_receive_protocol(TATL_SOCK, &msg);
   } else if (msg.type == SUCCESS) {
     aesKeyGen(CURRENT_AES_KEY);
+    macKeyGen(CURRENT_MAC_KEY);
+#ifdef SEC_DEBUG
+    printf("Generated AES key for room: ");
+    tatl_print_hex(CURRENT_AES_KEY, 16);
+    printf("\nGenerated MAC key for room: ");
+    tatl_print_hex(CURRENT_MAC_KEY, 32);
+    printf("\n");
+#endif 
   }
 
   if (msg.type == SUCCESS) {
@@ -417,7 +492,7 @@ int tatl_chat (const char* message) {
   if (*message == '\n') return 0; // Do not send a single newline
 
   char* plain = malloc(2056);
-  char cipher [2056];
+  unsigned char cipher [2056];
   strcpy(plain, message);
   
   long bytes = createMessage(CURRENT_AES_KEY, CURRENT_MAC_KEY, cipher, plain);
@@ -431,6 +506,11 @@ int tatl_chat (const char* message) {
   strcpy(msg.roomname, CURRENT_ROOM);
   msg.message_id = CURRENT_CHAT_ID++;
 
+#ifdef SEC_DEBUG
+  printf("Sending ciphertext: ");
+  tatl_print_hex(msg.message, msg.message_size);
+  printf("\n\n");
+#endif
   tatl_send_protocol(TATL_SOCK, &msg);
   return 0;
 }

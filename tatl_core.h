@@ -61,4 +61,6 @@ void tatl_send_protocol (int socket, tmsg* message);
 void tatl_set_error (const char* error);
 void tatl_print_error (const char* msg);
 
+void tatl_print_hex (const void* data, int num_bytes);
+
 #endif

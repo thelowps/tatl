@@ -1,5 +1,5 @@
 //takes in a pointer for where to put a key (16 bytes)
-void aesKeyGen(char *key);
+void aesKeyGen(unsigned char *key);
 //modifies the memory it points to to contain the key
 
 //takes in the key, the plaintext, and the number of blocks
@@ -11,7 +11,7 @@ void aesDec(char *aesKey, char *ctext, long numBlocks, char *ptext);
 // returns a pointer to the plaintext which will have a null term in it
 
 //takes in a pointer for where to put the key (32 bytes)
-void macKeyGen(char *key);
+void macKeyGen(unsigned char *key);
 // modifies the memory it points to to contain the key
 
 //takes in a buffer, a mac key, and the number of blocks that the input has (a block is two bytes)
@@ -19,11 +19,11 @@ void computeMAC(char * input, char * macKey, long numBlocks, char *MAC);
 //returns a pointer to the result of MACing it
 
 //Takes in the two keys, a space large enough to put the ciphertext in, and the text the user entered
-long createMessage(char *aesKey, char *macKey, char *cipherText, char *text);
+long createMessage(unsigned char *aesKey, unsigned char *macKey, unsigned char *cipherText, char *text);
 //Returns the number of bytes that the message is long
 
 //Takes in the two keys, a space large enough to put the recovered plain text is, and the message from the network
-int deconstructMessage(char *aesKey, char *macKey, char **plainTextPtr, char *input);
+int deconstructMessage(unsigned char *aesKey, unsigned char *macKey, char **plainTextPtr, unsigned char *input);
 //returns whether or not vrfy worked on the MAC, if it did and the keys match, encryption is successful
 
 //takes in the number of blocks and a str 16 bytes (a block) long
@@ -47,4 +47,4 @@ int vrfyMAC(char *input, char *macKey, int blocks, char *sentMAC);
 // returns 1 if the mac of the input using the macKey matches the sentMAC, 0 if not
 
 //hash a given text
-void hash_pass(char *password, char *digest);
+void hash_pass(char *password, unsigned char *digest);

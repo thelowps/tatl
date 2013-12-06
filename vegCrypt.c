@@ -14,12 +14,12 @@
 
 #define GCRY_MD GCRY_MD_SHA256			 // chooses the hash function
 
-void aesKeyGen(char *key){  //modifies the contents of the pointer passed to it to have a key
+void aesKeyGen(unsigned char *key) {  //modifies the contents of the pointer passed to it to have a key
 	int	keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
 	gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM); //stores a key in the array key,
 }
 
-void macKeyGen(char *key){
+void macKeyGen(unsigned char *key) {
 	int keyLength = 32; //That's what it is for SHA256
 	//if you change keyLength, also change it in computeMAC()
 	gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM);
@@ -128,7 +128,7 @@ void aesEnc(char *aesKey, const char *ptext, long *blocks, char *ctext){
 
 
 // need to decrypt the message
-void aesDec(char *aesKey, char *ctext, long numBlocks, char *ptext){ //given the ciphertext with the authentication block already gone
+void aesDec(unsigned char *aesKey, char *ctext, long numBlocks, char *ptext){ //given the ciphertext with the authentication block already gone
 	gcry_cipher_hd_t	cipherHandle;
 	gcry_error_t		gcryError;
 	
@@ -219,8 +219,15 @@ void computeMAC(char *input, char *macKey, long numBlocks, char *MAC){
 	char *tempDig;
 	gcry_md_write(hashHandle, input, (numBlocks * 16));
 	tempDig = (char*)gcry_md_read(hashHandle, GCRY_MD);
-	charncpy(MAC, tempDig, 32);
+	charncpy((char*)MAC, (char*)tempDig, 32);
 	gcry_md_close(hashHandle); //close the context	
+
+	printf("MAC: ");
+	int i;
+	for(i = 0; i < 32; ++i) {
+	  printf("%02x ", (unsigned char)MAC[i]);
+	}
+	printf("\n");
 }//end computeMAC	
 
 
@@ -285,7 +292,9 @@ long createMessage(char *aesKey, char *macKey, char *cipherText, char *text){
 
 
 //verify that the mac on the message is the mac from the first bit of text
-int vrfyMAC(char *input, char *macKey, int blocks, char *sentMAC){
+int vrfyMAC(void *input, void *macKey, int blocks, char *sentMAC){
+  input = (char*)input;
+  macKey = (char*)macKey;
 	int vrfy;
 	int digLength = 32;  //32 bytes of input 
 	char *computedMAC = malloc(digLength); 
@@ -301,23 +310,23 @@ int vrfyMAC(char *input, char *macKey, int blocks, char *sentMAC){
 }//end vrfyMAC 
 
 			
-int deconstructMessage(char *aesKey, char *macKey, char **plainTextPtr, char *input){
+int deconstructMessage(unsigned char *aesKey, unsigned char *macKey, char **plainTextPtr, unsigned char *input){
 	int blkLength = 16; //for AES128
 	long numBlocks;
 	char *blockString = malloc(blkLength);
-	charncpy(blockString, input, blkLength);
+	charncpy((char*)blockString, (char*)input, blkLength);
 	numBlocks = getBlockStr(blockString);
 	//printf("numBlocks is: %ld\n", numBlocks);
 	int success; //tells whether or not the vrfy function was successful
 	
 	char *MACdStuff = malloc((numBlocks - 2) * blkLength);  //we mac everything but the mac on the end
-	charncpy(MACdStuff, input, (numBlocks - 2) * blkLength);
+	charncpy((char*)MACdStuff, (char*)input, (numBlocks - 2) * blkLength);
 	char *ctext = malloc((numBlocks - 3) * blkLength);
 	//printf("ctext size is: %d\n", (numBlocks - 3) * blkLength);
-	charncpy(ctext, &input[blkLength], (numBlocks - 3) * blkLength);
+	charncpy((char*)ctext, (char*)(input+blkLength), (numBlocks - 3) * blkLength);
 
 	char *receivedMAC = malloc(2*blkLength);
-	charncpy(receivedMAC, &input[(numBlocks - 2) * blkLength], 2*blkLength);
+	charncpy((char*)receivedMAC, (char*)(input + (numBlocks - 2)*blkLength), 2*blkLength);
 	success = vrfyMAC(MACdStuff, macKey, (numBlocks - 2), receivedMAC);
 	//printf("numBlocks - 3 is: %d\n", numBlocks - 3);
 	char *pText = malloc(numBlocks - 3);
@@ -336,17 +345,17 @@ void hash_pass(char *password, char *digest){
   //pad the password to the next full block, deterministic padding, so
   //will modify the password in predictable way
   int length = strlen(password);
- int blkLen = 16;
- int inputLen;
- inputLen = blkLen * ceil((double)length / blkLen);  //space of input
- //is the next highest multiple of blkLen if not currently a multiple of
- //blkLen
-
- char input[inputLen];
- memset(input, '0', inputLen);
- memcpy(input, password, length);  //copy the password into part of the input
- printf("input to hash is: %16s \n\n", input);
- long numBlocks = inputLen / blkLen;
-
- computeMAC(input, "000000000000000000000000000003", numBlocks, digest);
+  int blkLen = 16;
+  int inputLen;
+  inputLen = blkLen * ceil((double)length / blkLen);  //space of input
+  //is the next highest multiple of blkLen if not currently a multiple of
+  //blkLen
+  
+  char input[inputLen];
+  memset(input, 0, inputLen);
+  memcpy(input, password, length);  //copy the password into part of the input
+  //printf("input to hash is: %16s \n\n", input);
+  long numBlocks = inputLen / blkLen;
+  
+  computeMAC(input, "000000000000000000000000000003", numBlocks, digest);
 }//end hash_pass

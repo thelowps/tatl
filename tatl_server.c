@@ -260,10 +260,10 @@ int tatl_user_chatted (tmsg* msg, userdata* user) {
 
   tmsg resp;
   resp.type = CHAT;
-  strcpy(resp.message, msg->message);
   strcpy(resp.username, user->name);
   strcpy(resp.roomname, user->room);
   resp.message_size = msg->message_size;
+  memcpy(resp.message, msg->message, msg->message_size);
   while (head) {
     userdata* chatee = *((userdata**)head->value);
     head = head->next;

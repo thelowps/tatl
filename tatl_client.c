@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
+
 // The socket to communicate with the server on
 int TATL_SOCK;
 char TATL_SERVER_IP [1024] = {0};
@@ -83,21 +84,21 @@ void tatl_spawn_heartbeat_sender() {
 }
 
 
-
-int tatl_init_client (const char* server_ip, int server_port, int flags) {  
+  
+int tatl_init_client (const char* server_ip, const char* server_port, int flags) {  
   if (tatl_sanity_check(NOT_INITIALIZED, NOT_IN_ROOM)) {
     return -1;
   }
   
-  if (ezconnect(&TATL_SOCK, server_ip, server_port) < 0) {
+  if (ezconnect2(&TATL_SOCK, server_ip, server_port, TATL_SERVER_IP) < 0) {
     return -1;
   }
   
   // Set flags
   CURRENT_MODE = CLIENT;
 
-  strcpy(TATL_SERVER_IP, server_ip);
-  TATL_SERVER_PORT = server_port;
+  TATL_SERVER_PORT = atoi(server_port);
+
 
   // Receive ID
   tmsg msg;
@@ -126,6 +127,7 @@ void* tatl_chat_listener (void* arg) {
     } else if (msg.type == CHAT && listener_function) {
       strcpy(chat.message, msg.message);
       strcpy(chat.sender, msg.username);
+      strcpy(chat.roomname, CURRENT_ROOM);
       listener_function(chat);	
     }
   }

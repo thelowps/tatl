@@ -39,4 +39,8 @@ int ezclose(int sock);
 // Gets socket data
 void ezsocketdata(int sock, char* ip, int* port);
 
+int ezconnect2(int* sock, const char* ip, const char* port, char *server_ip);
+
+int ezlisten2(int* sock, int port);
+
 #endif

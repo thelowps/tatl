@@ -82,6 +82,7 @@ int tatl_init_server (int port, int flags) {
   //do I need to call a pthread_join?
   
   ezlisten(&TATL_SOCK, port);
+//   ezlisten2(&TATL_SOCK, port);
   return 0;
 
 }

@@ -17,6 +17,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <sys/types.h>
+#include <netdb.h>
+
 #include "eztcp.h"
 
 // A switch to control whether or not the library prints out
@@ -127,3 +130,64 @@ void ezsocketdata(int sock, char* ip, int* port) {
   strcpy(ip, inet_ntoa(sa.sin_addr));
   *port = (int)ntohs(sa.sin_port);
 }
+
+int ezconnect2 (int* sock, const char* ip, const char* port, char * server_ip) {
+int sockfd;  
+struct addrinfo hints, *servinfo, *p;
+int rv;
+
+char ipstr[INET_ADDRSTRLEN];
+
+
+memset(&hints, 0, sizeof hints);
+hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
+hints.ai_socktype = SOCK_STREAM;
+
+if ((rv = getaddrinfo(ip, port, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    exit(1);
+}
+
+// loop through all the results and connect to the first we can
+for(p = servinfo; p != NULL; p = p->ai_next) {
+    if ((sockfd = socket(p->ai_family, p->ai_socktype,
+            p->ai_protocol)) == -1) {
+        perror("socket");
+        continue;
+    }
+
+    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        close(sockfd);
+        perror("connect");
+        continue;
+    }
+
+
+  break;
+}
+
+if (p == NULL) {
+    // looped off the end of the list with no connection
+    fprintf(stderr, "failed to connect\n");
+    exit(2);
+}
+
+//CODE TO GET THE IP ADDRESS FOR CLIENT TO STORE//
+struct in_addr *addr;
+struct sockaddr_in *ipv = (struct sockaddr_in *)p->ai_addr;
+addr = &(ipv->sin_addr);
+
+inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
+
+strcpy(server_ip, ipstr);
+
+
+freeaddrinfo(servinfo); // all done with this structure
+
+
+  *sock = sockfd;
+  return 0;
+}
+
+
+

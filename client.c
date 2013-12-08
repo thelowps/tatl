@@ -1,4 +1,5 @@
 #include "tatl.h"
+#include "vegCrypt.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -158,12 +159,11 @@ if(strcmp(command, join) == 0) {
 		strcpy(roomname, words[0]);
 		strcpy(username, words[1]);
 
+
   		  if (tatl_join_room(roomname, username, members) < 0) {
   	   		 tatl_print_error("-- Could not enter room");
   	  	} else {
   
-   	 
-  		
 
 
  			 printf("-- You have succesfully entered the room.\n");

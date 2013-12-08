@@ -9,6 +9,7 @@
 
 #include "tatl_core.h"
 #include "eztcp.h"
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -17,23 +18,34 @@ TATL_MODE CURRENT_MODE = NOT_INITIALIZED;
 char TATL_ERROR [1024] = {0};
 int TATL_USE_AUTHENTICATION = 0;
 
-// Send a null terminated string over the network
-int tatl_send (int socket, const char* message) {
+// Print hexadecimal data
+void tatl_print_hex (const void* data, int num_bytes) {
+  int i;
+  for (i = 0; i < num_bytes; ++i) {
+    printf("%02x ", ((unsigned char*)data)[i]);
+  }
+}
+
+// Send a serialized string over the network
+int tatl_send (int socket, const char* message, uint32_t msg_size) {
   int bytes_sent = 0;
-  int msg_size = strlen(message)+1;
-  bytes_sent += ezsend(socket, &msg_size, sizeof(int));
+  uint32_t msg_size_n = htonl(msg_size);
+  bytes_sent += ezsend(socket, &msg_size_n, sizeof(msg_size_n));
   bytes_sent += ezsend(socket, message, msg_size);
+  //tatl_print_hex(message, msg_size);
   return bytes_sent;
 }
 
-// Receive a null-terminated string over the networks
+// Receive a serialized 
 int tatl_receive (int socket, char** message) {
-  // TODO : make the size parameter actually matter
-  int message_size = 0;
+  uint32_t message_size = 0;
+  int bytes_received = 0;
   // TODO : send and receive message in network byte order
-  if (ezreceive(socket, &message_size, sizeof(int)) <= 0) return -1;
-  *message = malloc(sizeof(char) * message_size);
-  if (ezreceive(socket, *message, message_size) <= 0) return -1;
+  if ((bytes_received += ezreceive(socket, &message_size, sizeof(message_size))) <= 0) return -1;
+  message_size = ntohl(message_size);
+  *message = malloc(message_size);
+  memset(*message, message_size, 0);
+  if ((bytes_received += ezreceive(socket, *message, message_size)) <= 0) return -1;
   return message_size;
 }
 
@@ -41,12 +53,12 @@ int tatl_receive (int socket, char** message) {
 int tatl_receive_protocol (int socket, tmsg* msg) {
   char* raw_msg;
   char type;
-  int msg_size = tatl_receive(socket, &raw_msg);
-  if (msg_size < 0) return -1;
+  int raw_msg_size = tatl_receive(socket, &raw_msg);
+  if (raw_msg_size < 0) return -1;
   char* raw_temp = raw_msg;
   type = raw_msg[0];
   raw_msg++;
-  
+
   if (type == 'J') {
     msg->type = JOIN_ROOM;
     strcpy(msg->roomname, strtok(raw_msg, ":"));
@@ -73,7 +85,13 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     strcpy(msg->roomname, strtok(raw_msg, ":"));
     strcpy(msg->username, strtok(NULL, ":"));
     sscanf(strtok(NULL, ":"), "%d", &(msg->message_id));
-    strcpy(msg->message, strtok(NULL, ":"));
+    char* buf = strtok(NULL, ":");
+    sscanf(buf, "%d", &(msg->message_size));
+    if (msg->message_size) {
+      char* cipher = buf + strlen(buf) + 1;
+      //tatl_print_hex(cipher, msg->message_size);
+      memcpy(msg->message, cipher, msg->message_size);
+    }
   } else if (type == 'I') {
     msg->type = ID;
     strcpy(msg->message, raw_msg);
@@ -82,9 +100,16 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     strcpy(msg->message, raw_msg);
   } else if (type == 'H') {
     msg->type = HEARTBEAT;
-    strcpy(msg->roomname, strtok(raw_msg, ":"));
-    strcpy(msg->username, strtok(NULL, ":"));
+  } else if (type == 'A') { 
+    msg->type = AUTHENTICATION;
+    char* buf = strtok(raw_msg, ":");
+    sscanf(buf, "%u", &(msg->message_size));
+    if (msg->message_size) {
+      char* cipher = buf + strlen(buf)+1;
+      memcpy(msg->message, cipher, msg->message_size);
+    }
   }
+
   free(raw_temp);
   return 0;
 }
@@ -92,6 +117,8 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
 void tatl_send_protocol (int socket, tmsg* msg) {
   // TODO: sizing
   char* raw_msg = malloc(sizeof(char) * 2056);
+  memset(raw_msg, 0, 2056);
+  uint32_t msg_size = 0;
   if (msg->type == JOIN_ROOM) {
     sprintf(raw_msg, "J%s:%s", msg->roomname, msg->username);
   } else if (msg->type == LEAVE_ROOM) {
@@ -105,16 +132,30 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == GROUPS) {
     sprintf(raw_msg, "G%d %s", msg->amount_rooms, msg->message);
   } else if (msg->type == CHAT) {
-    sprintf(raw_msg, "T%s:%s:%u:%s", msg->roomname, msg->username, msg->message_id, msg->message);
+    sprintf(raw_msg, "T%s:%s:%u:%u:", msg->roomname, msg->username, msg->message_id, msg->message_size);
+    msg_size = strlen(raw_msg) + msg->message_size;
+    char* temp = raw_msg + strlen(raw_msg);
+    memcpy(temp, msg->message, msg->message_size);
+    //tatl_print_hex(temp, msg->message_size);
+    printf("\n");
   } else if (msg->type == ID) {
     sprintf(raw_msg, "I%s", msg->message);
   } else if (msg->type == LISTENER) {
     sprintf(raw_msg, "N%s", msg->message);
   } else if (msg->type == HEARTBEAT) {
     sprintf(raw_msg, "H%s:%s", msg->roomname, msg->username); 
+  } else if (msg->type == AUTHENTICATION) {
+    sprintf(raw_msg, "A%u:", msg->message_size);
+    msg_size = strlen(raw_msg) + msg->message_size + 1;
+    memcpy(raw_msg+strlen(raw_msg), msg->message, msg->message_size);
   }
-   tatl_send(socket, raw_msg);
-  
+
+  if (msg_size == 0) {
+    msg_size = strlen(raw_msg)+1;
+  }
+
+  tatl_send(socket, raw_msg, msg_size);
+
   free(raw_msg);
 }
 

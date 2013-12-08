@@ -78,7 +78,7 @@ int tatl_init_server (int port, int flags) {
   pthread_t thread;
   
   //create thread that kicks dead clients out every 2 minutes 
-  pthread_create(&thread, NULL, tatl_client_monitor, &ROOM_MAP);
+  pthread_create(&thread, NULL, tatl_client_monitor, NULL);
   //do I need to call a pthread_join?
   
   ezlisten(&TATL_SOCK, port);
@@ -193,7 +193,9 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
 
   // Get room data
   roomdata* room;
-  if (!(room = tatl_fetch_roomdata(msg->roomname))) {
+  int room_existed = 1;
+  if ( !(room = tatl_fetch_roomdata(msg->roomname)) ) {
+    room_existed = 0;
     room = tatl_create_roomdata(msg->roomname, msg->username);
   }
   
@@ -204,13 +206,42 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
     tatl_send_protocol(user->socket, &resp);    
     return 0;    
   }
+  
+  // Authenticate
+  if (room_existed) {
+    // Set the gatekeeper as the first person in the group
+    struct node* n = room->users_head;
+    userdata* u = *((userdata**)(n->value));
+    int gatekeeper = u->listener_socket;
 
-  // Update user data
-  strcpy(user->name, msg->username);
-  strcpy(user->room, msg->roomname);
+    // TODO : gatekeeping needs to be on separate socket
+    resp.type = AUTHENTICATION;
+    resp.message_size = 0;
+    tatl_send_protocol(user->socket, &resp);
 
-  tatl_add_user_to_room(room, user);
+    // Allow users to create a secret g^abh
+    tatl_receive_protocol(user->socket, &resp);
+    tatl_send_protocol(gatekeeper, &resp);
+    tatl_receive_protocol(gatekeeper, &resp);
+    tatl_send_protocol(user->socket, &resp);
 
+    // user handshakes
+    tatl_receive_protocol(user->socket, &resp);
+    tatl_send_protocol(gatekeeper, &resp);
+    tatl_receive_protocol(gatekeeper, &resp);
+    tatl_send_protocol(user->socket, &resp);
+
+    tatl_receive_protocol(gatekeeper, &resp);
+    tatl_send_protocol(user->socket, &resp);
+    tatl_receive_protocol(user->socket, &resp);
+    tatl_send_protocol(gatekeeper, &resp);
+
+    // key send
+    tatl_receive_protocol(gatekeeper, &resp);
+    tatl_send_protocol(user->socket, &resp);
+  } 
+  
+  // Add the user to the group
   resp.type = SUCCESS;
   resp.message[0] = 0;
   struct node* n = room->users_head;
@@ -224,6 +255,12 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
   }
   tatl_send_protocol(user->socket, &resp);
 
+  // Update user data
+  strcpy(user->name, msg->username);
+  strcpy(user->room, msg->roomname);
+
+  tatl_add_user_to_room(room, user);
+
   return 1;
 }
 
@@ -231,21 +268,26 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
 int tatl_user_chatted (tmsg* msg, userdata* user) {
   roomdata* room = tatl_fetch_roomdata(msg->roomname);
   struct node* head = room->users_head;
-#ifdef DEBUG
-  printf("Sending chat \"%s\"\n", msg->message);
-#endif
 
+#ifdef DEBUG
+  printf("User chatted.\n");
+  printf("Sending chat from %s to room %s\n", msg->username, msg->roomname);
+#endif
   tmsg resp;
   resp.type = CHAT;
-  strcpy(resp.message, msg->message);
   strcpy(resp.username, user->name);
   strcpy(resp.roomname, user->room);
+  resp.message_size = msg->message_size;
+  memcpy(resp.message, msg->message, msg->message_size);
+#ifdef DEBUG
+  printf("Message copy created. Sending.\n");
+#endif
   while (head) {
     userdata* chatee = *((userdata**)head->value);
     head = head->next;
     if (strcmp(chatee->name, user->name) == 0) continue;
 #ifdef DEBUG
-    printf("Sending chat \"%s\" to %s\n", msg->message, chatee->name);
+    //printf("Sending chat \"%s\" to %s\n", msg->message, chatee->name);
 #endif    
     tatl_send_protocol(chatee->listener_socket, &resp);
   }
@@ -269,7 +311,7 @@ int tatl_send_rooms (userdata* user) {
   }
   resp.amount_rooms = i;
 
-  printf("Sending full message: %s\n", resp.message);
+  //printf("Sending full message: %s\n", resp.message);
   tatl_send_protocol(user->socket, &resp);
   return 1;
 }
@@ -403,43 +445,42 @@ void tatl_destroy_roomdata (roomdata* room) {
 }
 
 int tatl_handle_heartbeat(tmsg* msg) {
-	roomdata* room = tatl_fetch_roomdata(msg->roomname);
-	int heartbeat = 1;
-	sh_set(room->HEARTBEAT_MAP, msg->username, &heartbeat, sizeof(heartbeat)); 
+  roomdata* room = tatl_fetch_roomdata(msg->roomname);
+  int heartbeat = 1;
+  sh_set(room->HEARTBEAT_MAP, msg->username, &heartbeat, sizeof(heartbeat)); 
 
-return 1;
+  return 1;
 }
 
-void * tatl_client_monitor(void *arg) {
-shash_t ROOM_MAP = *((shash_t*)arg); 
+void* tatl_client_monitor(void *arg) {
+ 
 
-
-while(1){
-	usleep(1200000000); 
-	int i = 0;
-	int j = 0;
-	roomdata* room;
-	int heartbeat;
-	char* user = malloc(sizeof(TATL_MAX_USERNAME_SIZE));
-	int reset = 0;
-        
-
-	while(sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))){   
-		while(sh_at(room->HEARTBEAT_MAP, j, user, &heartbeat, sizeof(heartbeat))){ 
-			if(heartbeat == 0) {
-				//have to delete given the key
-				sh_remove(room->HEARTBEAT_MAP, user);
-			}
-			else if(heartbeat == 1) {
-				//set it to zero, need the key to set 
-				sh_set(room->HEARTBEAT_MAP, user, &reset, sizeof(reset));
-			}
-			++j;
-
-		}
-		++i;
+  while(1) {
+    usleep(1200000000); 
+    int i = 0;
+    int j = 0;
+    roomdata* room;
+    int heartbeat;
+    char* user = malloc(sizeof(TATL_MAX_USERNAME_SIZE));
+    int reset = 0;
+       
+    while(sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))){   
+      while(sh_at(room->HEARTBEAT_MAP, j, user, &heartbeat, sizeof(heartbeat))){ 
+	if(heartbeat == 0) {
+	  //have to delete given the key
+	  sh_remove(room->HEARTBEAT_MAP, user);
 	}
-}
+	else if(heartbeat == 1) {
+	  //set it to zero, need the key to set 
+	  sh_set(room->HEARTBEAT_MAP, user, &reset, sizeof(reset));
+	}
+	++j;
 
-return 0;
+      }
+      ++i;
+    }
+    free(user);
+  }
+  
+  return 0;
 } 

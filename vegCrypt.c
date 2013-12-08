@@ -15,21 +15,21 @@
 #define GCRY_MD GCRY_MD_SHA256			 // chooses the hash function
 
 void aesKeyGen(unsigned char *key) {  //modifies the contents of the pointer passed to it to have a key
-	int	keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
-	gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM); //stores a key in the array key,
+  int	keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
+  gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM); //stores a key in the array key,
 }
 
 void macKeyGen(unsigned char *key) {
-	int keyLength = 32; //That's what it is for SHA256
-	//if you change keyLength, also change it in computeMAC()
-	gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM);
+  int keyLength = 32; //That's what it is for SHA256
+  //if you change keyLength, also change it in computeMAC()
+  gcry_randomize(key, keyLength, GCRY_STRONG_RANDOM);
 }
 
 void charncpy(char *cpyTo, char *cpyFrom, int x){
-	int iC;
-	for(iC = 0; iC < x; iC++){
-		cpyTo[iC] = cpyFrom[iC];
-	}
+  int iC;
+  for(iC = 0; iC < x; iC++){
+    cpyTo[iC] = cpyFrom[iC];
+  }
 }
 
 void aesEnc(char *aesKey, const char *ptext, long *blocks, char *ctext){
@@ -129,73 +129,73 @@ void aesEnc(char *aesKey, const char *ptext, long *blocks, char *ctext){
 
 // need to decrypt the message
 void aesDec(unsigned char *aesKey, char *ctext, long numBlocks, char *ptext){ //given the ciphertext with the authentication block already gone
-	gcry_cipher_hd_t	cipherHandle;
-	gcry_error_t		gcryError;
+  gcry_cipher_hd_t cipherHandle;
+  gcry_error_t gcryError;
 	
-	int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
-	int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
-	char * encCtrBlock = malloc(blkLength);
-	char	* encBufferBlock = malloc(blkLength);
-	char	* outBufferBlock = malloc(blkLength);  // allocate space for the new block of plaintext
+  int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
+  int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
+  char* encCtrBlock = malloc(blkLength);
+  char* encBufferBlock = malloc(blkLength);
+  char* outBufferBlock = malloc(blkLength);  // allocate space for the new block of plaintext
 
-	int iC; // a loop counter
-	gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);  // again, mode/type is irrelevant because this is encrypting an individual block
-	if (gcryError){
-		printf("Failure in gcry_cipher_open.\n");
-		return;
-	}
+  int iC; // a loop counter
+  gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);  // again, mode/type is irrelevant because this is encrypting an individual block
+  if (gcryError){
+    printf("Failure in gcry_cipher_open.\n");
+    return;
+  }
 
-	gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);
-	if (gcryError){
-		printf("Failure in gcry_cipher_setkey.\n");
-		return;
-	}
-	// get the ctr from the ciphertext
-	char *ctr = malloc(blkLength);
-	memcpy(ctr, ctext, blkLength);
-	gcryError = gcry_cipher_setiv(cipherHandle, ctr, blkLength);  // do this manually so the definition shouldn't matter
-	if(gcryError){
-		printf("Failure in gcry_cipher_setiv.\n");
-		return;
-	}
+  gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);
+  if (gcryError){
+    printf("Failure in gcry_cipher_setkey.\n");
+    return;
+  }
+  // get the ctr from the ciphertext
+  char *ctr = malloc(blkLength);
+  memcpy(ctr, ctext, blkLength);
+  gcryError = gcry_cipher_setiv(cipherHandle, ctr, blkLength);  // do this manually so the definition shouldn't matter
+  if(gcryError){
+    printf("Failure in gcry_cipher_setiv.\n");
+    return;
+  }
 	
-	//actually decrypt now
-	for(iC = 1; iC <= (numBlocks - 1); iC++) { // runs through all ciphertext blocks (indexing starting at 0, skip ctr block)
-		gcryError = gcry_cipher_encrypt(cipherHandle, encCtrBlock, blkLength, ctr, blkLength); //AES the ctr, put this in encCtrBlock
-		if(gcryError){ //make sure encryption was successful
-			printf("Failure in gcry_cipher_encrpyt.\n");
-			return;
-		}
+  //actually decrypt now
+  for(iC = 1; iC <= (numBlocks - 1); iC++) { // runs through all ciphertext blocks (indexing starting at 0, skip ctr block)
+    gcryError = gcry_cipher_encrypt(cipherHandle, encCtrBlock, blkLength, ctr, blkLength); //AES the ctr, put this in encCtrBlock
+    if(gcryError){ //make sure encryption was successful
+      printf("Failure in gcry_cipher_encrypt.\n");
+      return;
+    }
 		
-		int jC;  //loop coutner
-		for(jC = 0; jC < blkLength; jC++) { // runs through each byte of the ciphertext block
-			
-			encBufferBlock[jC] = ctext[blkLength * (iC) + jC];  // finds the part of the block of ciphertext we're looking for
-			//printf("Index of ctext: %d\n", (blkLength * iC) + jC);
-			outBufferBlock[jC] = (encCtrBlock[jC] ^ encBufferBlock[jC]);  //XOR the block we have with
-			ptext[(iC - 1) * blkLength + jC] = outBufferBlock[jC];   // iC - 1 to remove ctr from the front of the message
-			//printf("Index of ptext: %d\n", (iC - 1) * blkLength + jC);
-		}
+    int jC;  //loop coutner
+    for(jC = 0; jC < blkLength; jC++) { // runs through each byte of the ciphertext block
+      encBufferBlock[jC] = ctext[blkLength * (iC) + jC];  // finds the part of the block of ciphertext we're looking for
+      //printf("Index of ctext: %d\n", (blkLength * iC) + jC);
+      outBufferBlock[jC] = (encCtrBlock[jC] ^ encBufferBlock[jC]);  //XOR the block we have with
+      ptext[(iC - 1) * blkLength + jC] = outBufferBlock[jC];   // iC - 1 to remove ctr from the front of the message
+      //printf("Index of ptext: %d\n", (iC - 1) * blkLength + jC);
+    }
 		
-		int ctrIndex;
-		for(ctrIndex = 15; ctrIndex >= 0; ctrIndex--){
-			if (ctr[ctrIndex] == 127)   // if the last char is at 127, set it to zero and continue on to increment the next char
-			{
-				ctr[ctrIndex] = 0;
+    int ctrIndex;
+    for(ctrIndex = 15; ctrIndex >= 0; ctrIndex--){
+      if (ctr[ctrIndex] == 127)   // if the last char is at 127, set it to zero and continue on to increment the next char
+	{
+	  ctr[ctrIndex] = 0;
 				
-			}
-			else	// otherwise, increment this character and move on
-			{
-				ctr[ctrIndex] += 1;
-				ctrIndex = -1;
-			}
-		}
 	}
-	free(encCtrBlock);
-	free(encBufferBlock);
-	free(outBufferBlock);
-	free(ctr);
-	gcry_cipher_close(cipherHandle);
+      else	// otherwise, increment this character and move on
+	{
+	  ctr[ctrIndex] += 1;
+	  ctrIndex = -1;
+	}
+    }
+  }
+
+  free(encCtrBlock);
+  free(encBufferBlock);
+  free(outBufferBlock);
+  free(ctr);
+  gcry_cipher_close(cipherHandle);
 }
 
 
@@ -222,12 +222,14 @@ void computeMAC(char *input, char *macKey, long numBlocks, char *MAC){
 	charncpy((char*)MAC, (char*)tempDig, 32);
 	gcry_md_close(hashHandle); //close the context	
 
+	/*
 	printf("MAC: ");
 	int i;
 	for(i = 0; i < 32; ++i) {
 	  printf("%02x ", (unsigned char)MAC[i]);
 	}
 	printf("\n");
+	*/
 }//end computeMAC	
 
 
@@ -295,50 +297,50 @@ long createMessage(char *aesKey, char *macKey, char *cipherText, char *text){
 int vrfyMAC(void *input, void *macKey, int blocks, char *sentMAC){
   input = (char*)input;
   macKey = (char*)macKey;
-	int vrfy;
-	int digLength = 32;  //32 bytes of input 
-	char *computedMAC = malloc(digLength); 
-	computeMAC(input, macKey, blocks, computedMAC);
-	if(strncmp(computedMAC, sentMAC, digLength) == 0){//if the first digLenth bytes match (no null term, so strncmp not strcmp)
-		vrfy = 1;
-	}
-	else{
-		vrfy = 0;
-	}
-	free(computedMAC);
-	return vrfy;
+  int vrfy, digLength = 32;  //32 bytes of input 
+  char *computedMAC = malloc(digLength); 
+  computeMAC(input, macKey, blocks, computedMAC);
+  if (strncmp(computedMAC, sentMAC, digLength) == 0) {  //if the first digLenth bytes match (no null term, so strncmp not strcmp)
+    vrfy = 1;
+  } else {
+    vrfy = 0;
+  }
+
+  free(computedMAC);
+  return vrfy;
 }//end vrfyMAC 
 
 			
 int deconstructMessage(unsigned char *aesKey, unsigned char *macKey, char **plainTextPtr, unsigned char *input){
-	int blkLength = 16; //for AES128
-	long numBlocks;
-	char *blockString = malloc(blkLength);
-	charncpy((char*)blockString, (char*)input, blkLength);
-	numBlocks = getBlockStr(blockString);
-	//printf("numBlocks is: %ld\n", numBlocks);
-	int success; //tells whether or not the vrfy function was successful
+  int blkLength = 16; //for AES128
+  long numBlocks;
+  char *blockString = malloc(blkLength);
+  charncpy((char*)blockString, (char*)input, blkLength);
+  numBlocks = getBlockStr(blockString);
+  //printf("deconstructMessage: numBlocks is: %ld\n", numBlocks);
+  int success; //tells whether or not the vrfy function was successful
 	
-	char *MACdStuff = malloc((numBlocks - 2) * blkLength);  //we mac everything but the mac on the end
-	charncpy((char*)MACdStuff, (char*)input, (numBlocks - 2) * blkLength);
-	char *ctext = malloc((numBlocks - 3) * blkLength);
-	//printf("ctext size is: %d\n", (numBlocks - 3) * blkLength);
-	charncpy((char*)ctext, (char*)(input+blkLength), (numBlocks - 3) * blkLength);
+  char *MACdStuff = malloc((numBlocks - 2) * blkLength);  //we mac everything but the mac on the end
+  charncpy((char*)MACdStuff, (char*)input, (numBlocks - 2) * blkLength);
+  char *ctext = malloc((numBlocks - 3) * blkLength);
+  //printf("ctext size is: %d\n", (numBlocks - 3) * blkLength);
+  charncpy((char*)ctext, (char*)(input+blkLength), (numBlocks - 3) * blkLength);
 
-	char *receivedMAC = malloc(2*blkLength);
-	charncpy((char*)receivedMAC, (char*)(input + (numBlocks - 2)*blkLength), 2*blkLength);
-	success = vrfyMAC(MACdStuff, macKey, (numBlocks - 2), receivedMAC);
-	//printf("numBlocks - 3 is: %d\n", numBlocks - 3);
-	char *pText = malloc(numBlocks - 3);
-	aesDec(aesKey, ctext, (numBlocks - 3), pText);
-	//printf("Plain text in deconstructMessage is: %s\n", pText);
-	*plainTextPtr = pText; //set the location
+  char *receivedMAC = malloc(2*blkLength);
+  charncpy((char*)receivedMAC, (char*)(input + (numBlocks - 2)*blkLength), 2*blkLength);
+  success = vrfyMAC(MACdStuff, macKey, (numBlocks - 2), receivedMAC);
+  //printf("numBlocks - 3 is: %d\n", numBlocks - 3);
+  char *pText = malloc((numBlocks-3)*blkLength);
+  aesDec(aesKey, ctext, (numBlocks - 3), pText);
+  //printf("Plain text in deconstructMessage is: %s\n", pText);
+  *plainTextPtr = pText; //set the location
 	
-	//don't free pText
-	free(MACdStuff);
-	free(ctext);
-	free(receivedMAC);
-	return success;
+  //don't free pText
+  free(MACdStuff);
+  free(ctext);
+  free(receivedMAC);
+  free(blockString);
+  return success;
 }
 
 void hash_pass(char *password, char *digest){
@@ -357,5 +359,5 @@ void hash_pass(char *password, char *digest){
   //printf("input to hash is: %16s \n\n", input);
   long numBlocks = inputLen / blkLen;
   
-  computeMAC(input, "000000000000000000000000000003", numBlocks, digest);
+  computeMAC(input, "000000000000000000000000000042", numBlocks, digest);
 }//end hash_pass

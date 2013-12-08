@@ -70,7 +70,6 @@ int ezreceive (int sock, void* data, int len) {
       return n;
     } else {
       bytes_received += n;
-      printf("In receiving while loop: got %d bytes. %d left.\n", n, len-bytes_received);
     }    
   }
   return bytes_received;

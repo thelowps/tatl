@@ -15,7 +15,7 @@
 #include <gmp.h>
 
 #define DEBUG
-#define SEC_DEBUG
+//#define SEC_DEBUG
 
 // The socket to communicate with the server on
 int TATL_SOCK;
@@ -79,18 +79,16 @@ int tatl_sanity_check (TATL_MODE expected_mode, TATL_CLIENT_STATUS expected_stat
 
 
 void* tatl_send_heartbeat (void* arg) {
-        tmsg msg;
-        msg.type = HEARTBEAT;
-	while(1){
-		usleep(550000000);
-       	        strcpy(msg.roomname, CURRENT_ROOM);
-                strcpy(msg.username, CURRENT_USERNAME);
-                tatl_send_protocol(TATL_SOCK, &msg); 
-		
-		
-	}
+  tmsg msg;
+  msg.type = HEARTBEAT;
+  while(1){
+    usleep(550000000);
+    strcpy(msg.roomname, CURRENT_ROOM);
+    strcpy(msg.username, CURRENT_USERNAME);
+    tatl_send_protocol(TATL_SOCK, &msg); 
+  }
 
-return 0;
+  return 0;
 }
 
 
@@ -190,6 +188,9 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
 #ifdef SEC_DEBUG
   printf("VERIFYING OTHER PARTY: Party verified.\n\n");
 #endif
+
+  mpz_clear(check);
+  mpz_clear(resp);
   return 1;
 }
 
@@ -197,7 +198,8 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
   tmsg msg;
   msg.type = AUTHENTICATION;
   mpz_t check, resp;
-  mpz_inits(check, resp, NULL);
+  mpz_init(check);
+  mpz_init(resp);
 
   // Receive the random number
   tatl_receive_protocol(socket, &msg);
@@ -225,13 +227,16 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
   mpz_mod(resp, resp, TATL_DEFAULT_MULT_GROUP.p);
 
   char* resp_str = mpz_get_str(NULL, 10, resp);
-#ifdef DEBUG
+#ifdef SEC_DEBUG
   printf("IN SELF VERIFICATION: Sending response:\n%s\n\n", resp_str);
 #endif
   strcpy(msg.message, resp_str);
   msg.message_size = strlen(resp_str)+1;
   free(resp_str);
   tatl_send_protocol(socket, &msg);
+
+  mpz_clear(check);
+  mpz_clear(resp);
 }
 
 // Authentication function
@@ -245,7 +250,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   mpz_init(ga);
   mpz_init(gb);
   mpz_init(gab);
-  mpz_init(pass_hash);
+  //mpz_init(pass_hash);
   mpz_init(gabh);
   
   // Generate a random number to seed our RNG
@@ -283,7 +288,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   mpz_import(pass_hash, 32, 1, sizeof(char), 1, 0, CURRENT_PASS_HASH);  
   mpz_powm(gabh, gab, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
 
-#ifdef DEBUG
+#ifdef SEC_DEBUG
   printf("Random number for seeding is: %ld\n\n", seed);
   printf("We took our g^b:\n");
   mpz_out_str(stdout, 10, gb);
@@ -300,7 +305,11 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   
   // Prepare for our random number handshake
   mpz_t check, resp, gbh, exponent, inverse;
-  mpz_inits(check, resp, gbh, exponent, inverse, NULL);
+  mpz_init(check);
+  mpz_init(resp);
+  mpz_init(gbh);
+  mpz_init(exponent);
+  mpz_init(inverse);
 
   // calculate gbh
   mpz_powm(gbh, gb, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
@@ -319,12 +328,16 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
     success = tatl_diffie_hellman_verify_party(socket, gabh, inverse, state);
   }
 
+  // Free the state
+  gmp_randclear(state);
+
   if (success) {
 #ifdef SEC_DEBUG
     printf("Handshake successful!\n");
 #endif
     mpz_t enc_key, enc_mac_key;
-    mpz_inits(enc_key, enc_mac_key, NULL);
+    mpz_init(enc_key);
+    mpz_init(enc_mac_key);
 
     if (initial) {
 #ifdef SEC_DEBUG
@@ -363,7 +376,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 #endif
       free(enc_key_str);
       free(enc_mac_key_str);
-
+ 
     } else {
       tatl_receive_protocol(socket, &msg);
       mpz_set_str(enc_key, strtok(msg.message, ":"), 10);
@@ -399,14 +412,41 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 	printf("%.2x", CURRENT_MAC_KEY[i]);
       }
 #endif
+
     } 
 
+    mpz_clear(enc_key);
+    mpz_clear(enc_mac_key);
+    mpz_clear(check);
+    mpz_clear(resp);
+    mpz_clear(gbh);
+    mpz_clear(exponent);
+    mpz_clear(inverse);
+    mpz_clear(a);
+    mpz_clear(ga);
+    mpz_clear(gb);
+    mpz_clear(gab);
+    mpz_clear(pass_hash);
+    mpz_clear(gabh); 
+
     return 1;
-    
+
   } else {
 #ifdef SEC_DEBUG
     printf("Handshake unsuccessful.\n\n");
 #endif
+    mpz_clear(check);
+    mpz_clear(resp);
+    mpz_clear(gbh);
+    mpz_clear(exponent);
+    mpz_clear(inverse);
+    mpz_clear(a);
+    mpz_clear(ga);
+    mpz_clear(gb);
+    mpz_clear(gab);
+    mpz_clear(pass_hash);
+    mpz_clear(gabh);
+
     return 0;
   }
   
@@ -442,7 +482,9 @@ void* tatl_chat_listener (void* arg) {
       int success = deconstructMessage(CURRENT_AES_KEY, CURRENT_MAC_KEY, &buf, (unsigned char*)msg.message);
       
       if (!success) {
+#ifdef SEC_DEBUG
 	printf("Received a message with a Bad MAC\n\n");
+#endif
       }
       strcpy(chat.message, buf);
       strcpy(chat.sender, msg.username);
@@ -569,8 +611,3 @@ int tatl_request_rooms (char* rooms) {
   strcpy(rooms, msg.message);
   return msg.amount_rooms;
 }
-
-
-
-
-

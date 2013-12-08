@@ -31,10 +31,7 @@ int tatl_send (int socket, const char* message, uint32_t msg_size) {
   int bytes_sent = 0;
   uint32_t msg_size_n = htonl(msg_size);
   bytes_sent += ezsend(socket, &msg_size_n, sizeof(msg_size_n));
-  printf("raw message size before conversion: %d, after: %d\n", msg_size, msg_size_n);
   bytes_sent += ezsend(socket, message, msg_size);
-  printf("Sent %d bytes.\n", bytes_sent);
-  //printf("Raw message sent: ");
   //tatl_print_hex(message, msg_size);
   return bytes_sent;
 }
@@ -49,10 +46,6 @@ int tatl_receive (int socket, char** message) {
   *message = malloc(message_size);
   memset(*message, message_size, 0);
   if ((bytes_received += ezreceive(socket, *message, message_size)) <= 0) return -1;
-  printf("Received %d bytes total.\n", bytes_received);
-  //printf("The full raw message received, in hex, is:\n");
-  //tatl_print_hex(*message, message_size);
-  //printf("\n");
   return message_size;
 }
 
@@ -96,8 +89,7 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     sscanf(buf, "%d", &(msg->message_size));
     if (msg->message_size) {
       char* cipher = buf + strlen(buf) + 1;
-      printf("In receive_protocol. Cipher is: ");
-      tatl_print_hex(cipher, msg->message_size);
+      //tatl_print_hex(cipher, msg->message_size);
       memcpy(msg->message, cipher, msg->message_size);
     }
   } else if (type == 'I') {
@@ -144,8 +136,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
     msg_size = strlen(raw_msg) + msg->message_size;
     char* temp = raw_msg + strlen(raw_msg);
     memcpy(temp, msg->message, msg->message_size);
-    printf("In send_protocol. Set message to: ");
-    tatl_print_hex(temp, msg->message_size);
+    //tatl_print_hex(temp, msg->message_size);
     printf("\n");
   } else if (msg->type == ID) {
     sprintf(raw_msg, "I%s", msg->message);

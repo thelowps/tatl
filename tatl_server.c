@@ -267,16 +267,20 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
 int tatl_user_chatted (tmsg* msg, userdata* user) {
   roomdata* room = tatl_fetch_roomdata(msg->roomname);
   struct node* head = room->users_head;
-#ifdef DEBUG
-  //printf("Sending chat \"%s\"\n", msg->message);
-#endif
 
+#ifdef DEBUG
+  printf("User chatted.\n");
+  printf("Sending chat from %s to room %s\n", msg->username, msg->roomname);
+#endif
   tmsg resp;
   resp.type = CHAT;
   strcpy(resp.username, user->name);
   strcpy(resp.roomname, user->room);
   resp.message_size = msg->message_size;
   memcpy(resp.message, msg->message, msg->message_size);
+#ifdef DEBUG
+  printf("Message copy created. Sending.\n");
+#endif
   while (head) {
     userdata* chatee = *((userdata**)head->value);
     head = head->next;
@@ -440,43 +444,41 @@ void tatl_destroy_roomdata (roomdata* room) {
 }
 
 int tatl_handle_heartbeat(tmsg* msg) {
-	roomdata* room = tatl_fetch_roomdata(msg->roomname);
-	int heartbeat = 1;
-	sh_set(room->HEARTBEAT_MAP, msg->username, &heartbeat, sizeof(heartbeat)); 
+  roomdata* room = tatl_fetch_roomdata(msg->roomname);
+  int heartbeat = 1;
+  sh_set(room->HEARTBEAT_MAP, msg->username, &heartbeat, sizeof(heartbeat)); 
 
-return 1;
+  return 1;
 }
 
-void * tatl_client_monitor(void *arg) {
-shash_t ROOM_MAP = *((shash_t*)arg); 
+void* tatl_client_monitor(void *arg) {
+  shash_t ROOM_MAP = *((shash_t*)arg); 
 
-
-while(1){
-	usleep(1200000000); 
-	int i = 0;
-	int j = 0;
-	roomdata* room;
-	int heartbeat;
-	char* user = malloc(sizeof(TATL_MAX_USERNAME_SIZE));
-	int reset = 0;
-        
-
-	while(sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))){   
-		while(sh_at(room->HEARTBEAT_MAP, j, user, &heartbeat, sizeof(heartbeat))){ 
-			if(heartbeat == 0) {
-				//have to delete given the key
-				sh_remove(room->HEARTBEAT_MAP, user);
-			}
-			else if(heartbeat == 1) {
-				//set it to zero, need the key to set 
-				sh_set(room->HEARTBEAT_MAP, user, &reset, sizeof(reset));
-			}
-			++j;
-
-		}
-		++i;
+  while(1) {
+    usleep(1200000000); 
+    int i = 0;
+    int j = 0;
+    roomdata* room;
+    int heartbeat;
+    char* user = malloc(sizeof(TATL_MAX_USERNAME_SIZE));
+    int reset = 0;
+       
+    while(sh_at(ROOM_MAP, i, NULL, &room, sizeof(room))){   
+      while(sh_at(room->HEARTBEAT_MAP, j, user, &heartbeat, sizeof(heartbeat))){ 
+	if(heartbeat == 0) {
+	  //have to delete given the key
+	  sh_remove(room->HEARTBEAT_MAP, user);
 	}
-}
+	else if(heartbeat == 1) {
+	  //set it to zero, need the key to set 
+	  sh_set(room->HEARTBEAT_MAP, user, &reset, sizeof(reset));
+	}
+	++j;
 
-return 0;
+      }
+      ++i;
+    }
+  }
+  
+  return 0;
 } 

@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <string.h>
 #include "gcrypt.h"
+#include "vegCrypt.h"
 
 
 #define GCRY_CIPHER GCRY_CIPHER_AES128        // chooses the cipher
@@ -32,7 +33,7 @@ void charncpy(char *cpyTo, char *cpyFrom, int x){
   }
 }
 
-void aesEnc(char *aesKey, const char *ptext, long *blocks, char *ctext){
+void aesEnc(unsigned char *aesKey, const char *ptext, long *blocks, char *ctext){
 	gcry_cipher_hd_t	cipherHandle;
 	gcry_error_t		gcryError;
 	
@@ -269,27 +270,27 @@ long getBlockStr(char *str){
 }//end getBlockStr
 
 //creates message given the two keys and the text
-long createMessage(char *aesKey, char *macKey, char *cipherText, char *text){
-	int blkLength = 16; //this is for AES128
-	long numBlocks = 0;
-	long *numPtr = &numBlocks;
+long createMessage(unsigned char *aesKey, unsigned char *macKey, unsigned char *cipherText, char *text){
+  int blkLength = 16; //this is for AES128
+  long numBlocks = 0;
+  long *numPtr = &numBlocks;
 	
-	char *cText = malloc(strlen(text) + 1 + (16 * 7));
-	aesEnc(aesKey, text, numPtr, cText);
-	charncpy(&cipherText[blkLength], cText, (numBlocks + 1) * blkLength); //put the encrypted stuff starting in the second block
-	numBlocks += 4;  //numBlocks returned is length of padded plaintext, need another for the ctr and another for the length and two for the mac 
-	char * blockStr = malloc(blkLength);
-	setBlockStr(blockStr, numBlocks);
-	charncpy(&cipherText[0], blockStr, blkLength);
+  unsigned char *cText = malloc(strlen(text) + 1 + (16 * 7));
+  AES_CBC_ENC(aesKey, text, numPtr, cText);
+  charncpy(&cipherText[blkLength], cText, (numBlocks + 1) * blkLength); //put the encrypted stuff starting in the second block
+  numBlocks += 4;  //numBlocks returned is length of padded plaintext, need another for the ctr and another for the length and two for the mac 
+  char * blockStr = malloc(blkLength);
+  setBlockStr(blockStr, numBlocks);
+  charncpy(&cipherText[0], blockStr, blkLength);
 	
-	char * sendMAC = malloc(32);  //32 bytes for the MAC we're sending
-	computeMAC(cipherText, macKey, (numBlocks - 2), sendMAC); // calculates the MAC
-	charncpy(&cipherText[(numBlocks - 2) * blkLength], sendMAC, blkLength * 2);
+  char * sendMAC = malloc(32);  //32 bytes for the MAC we're sending
+  computeMAC(cipherText, macKey, (numBlocks - 2), sendMAC); // calculates the MAC
+  charncpy(&cipherText[(numBlocks - 2) * blkLength], sendMAC, blkLength * 2);
 	
-	free(cText);
-	free(blockStr);
-	free(sendMAC);
-	return numBlocks * 16; //the number of bytes, because each block is 16 bytes
+  free(cText);
+  free(blockStr);
+  free(sendMAC);
+  return numBlocks * 16; //the number of bytes, because each block is 16 bytes
 }//end createMessage
 
 
@@ -331,7 +332,7 @@ int deconstructMessage(unsigned char *aesKey, unsigned char *macKey, char **plai
   success = vrfyMAC(MACdStuff, macKey, (numBlocks - 2), receivedMAC);
   //printf("numBlocks - 3 is: %d\n", numBlocks - 3);
   char *pText = malloc((numBlocks-3)*blkLength);
-  aesDec(aesKey, ctext, (numBlocks - 3), pText);
+  AES_CBC_DEC(aesKey, ctext, (numBlocks - 3), pText);
   //printf("Plain text in deconstructMessage is: %s\n", pText);
   *plainTextPtr = pText; //set the location
 	
@@ -343,7 +344,7 @@ int deconstructMessage(unsigned char *aesKey, unsigned char *macKey, char **plai
   return success;
 }
 
-void hash_pass(char *password, char *digest){
+void hash_pass(char *password, unsigned char *digest){
   //pad the password to the next full block, deterministic padding, so
   //will modify the password in predictable way
   int length = strlen(password);
@@ -361,3 +362,143 @@ void hash_pass(char *password, char *digest){
   
   computeMAC(input, "000000000000000000000000000042", numBlocks, digest);
 }//end hash_pass
+
+void AES_CBC_ENC(char *aesKey, const char *ptext, long *blocks, char *ctext){
+  gcry_cipher_hd_t        cipherHandle;
+  gcry_error_t            gcryError;
+  
+  int i, iC;  //loop counters
+  int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
+  int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
+
+  int ptextLength = strlen(ptext) + 1; //gets the number of characters including null terminator in the plaintext
+  
+  int paddedLength;
+  if( (ptextLength % blkLength) == 0){
+    paddedLength = ptextLength;
+  }
+  else{
+    paddedLength = ptextLength - (ptextLength % blkLength) + blkLength;
+  }
+
+ char *padded_ptext = malloc(paddedLength);
+ memset(padded_ptext, 0, paddedLength);    //initialize to null terminators
+ memset(ctext, 0, paddedLength + blkLength);  //initialize ctext to null terminators
+
+ memcpy(padded_ptext, ptext, strlen(ptext)); //copy the ptext into the padded ptext, the rest of the padding is null terminators
+ 
+ long    numBlocks = paddedLength / blkLength;           // the number of blocks for the padded plaintext, important for the for loop
+ *blocks = numBlocks; //let createMessage know how many blocks were encrypted
+ //printf("Num blocks is: %ld\n", numBlocks);
+ char *IV = malloc(blkLength); //random string 16 bytes for the ctr
+
+ gcry_randomize(IV, blkLength, GCRY_STRONG_RANDOM);
+
+ memcpy(ctext, IV, blkLength);  // set the first block of ctext to the IV.
+
+ gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);
+ if (gcryError){
+   //printf("Failure in gcry_cipher_open.\n");
+   return;
+ }
+ 
+ gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);
+ //this matters, it needs the key
+ if (gcryError){
+   //printf("Failure in gcry_cipher_setkey.\n");
+   return;
+ }
+
+ gcryError = gcry_cipher_setiv(cipherHandle, IV, blkLength); // this is important, now trying to use libgcrypt to do the mode
+ if(gcryError){
+   //printf("Failure in gcry_cipher_setiv.\n");
+   return;
+ }
+ 
+ for(iC = 1; iC <= numBlocks; iC++){
+   //printf("iC for encrypting loop is: %d\n", iC);
+   //printf("numBlocks is: %ld\n", numBlocks);
+   gcryError = gcry_cipher_encrypt(cipherHandle, &ctext[16 * iC],
+				   blkLength, &padded_ptext[16 * (iC - 1)], blkLength);
+   if(gcryError){
+     //printf("Failure in gcry_cipher_encrypt.\n");
+     return;
+   }
+
+   memcpy(IV, &ctext[16 * iC], blkLength); //fix IV for the next part
+
+   //printf("ctext is: \n");
+   for(i = 0; i < (numBlocks + 1)* blkLength; i++){
+     //printf("%2x ", (unsigned char)ctext[i]);
+   }
+
+   //printf("\nIV for next round is: ");
+   for(i = 0; i < blkLength; i++){
+     //printf("%2x ", (unsigned char)IV[i]);
+   }
+   //printf("\n");
+ 
+   gcryError = gcry_cipher_setiv(cipherHandle, IV, blkLength); // this is important, now trying to use libgcrypt to do the mode
+   if(gcryError){
+     //printf("Failure in gcry_cipher_setiv.\n");
+     return;
+   }
+   //printf("iC value at bottom of for loop is: %d\n", iC);
+ }
+ 
+ free(IV);
+ free(padded_ptext);
+ gcry_cipher_close(cipherHandle);
+ //printf("returning at bottom\n");
+ return;
+}
+
+void AES_CBC_DEC(char *aesKey, char *ctext, long numBlocks, char *ptext){ //given the ciphertext with the authentication block already gone
+  
+  gcry_cipher_hd_t        cipherHandle;
+  gcry_error_t            gcryError;
+  
+  int i;  //loop counter
+  int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
+  int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
+
+
+  gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);  // again, mode/type is irrelevant because this is encrypting an individual block
+  if (gcryError){
+    //printf("Failure in gcry_cipher_open.\n");
+    return;
+  }
+
+  gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);
+  if (gcryError){
+    //printf("Failure in gcry_cipher_setkey.\n");
+    return;
+  }
+
+  // get the ctr from the ciphertext
+  //printf("Got to here 1\n");
+  char *IV = malloc(blkLength);
+  memcpy(IV, ctext, blkLength);
+  gcryError = gcry_cipher_setiv(cipherHandle, IV, blkLength);  // totally matters
+  if(gcryError){
+    //printf("Failure in gcry_cipher_setiv.\n");
+    return;
+  }
+
+  //printf("Got to here\n");
+  gcryError = gcry_cipher_decrypt(cipherHandle, ptext, (numBlocks * blkLength), &ctext[16], (numBlocks * blkLength));
+
+  if(gcryError){
+    //printf("Failure in gcry_cipher_encrypt.\n");
+    return;
+  }
+
+  //printf("ptext is: \n");
+  for(i = 0; i < numBlocks * blkLength; i++){
+    //printf("%2x ", (unsigned char)ptext[i]);
+  }
+
+  free(IV);
+  gcry_cipher_close(cipherHandle);
+  return;
+}

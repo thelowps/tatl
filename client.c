@@ -54,8 +54,7 @@ int main (int argc, char** argv) {
   strcpy(host, strtok(host_and_port, ":"));
   strcpy(port, strtok(NULL, ":"));
   //
-  
-
+ 
   tatl_init_client(host, port, 0);
   tatl_set_chat_listener(handle_chat);
   
@@ -63,14 +62,10 @@ int main (int argc, char** argv) {
   printf("-- Should you find anything not to your liking, --\n");
   printf("-- please send your complaints to /dev/null.    --\n\n");
 
-
-
   printf("-- type 'list' to get a list of existing chatrooms   --\n");
   printf("-- to join, type 'join' [roomname] [username]   --\n");
   printf("-- once in a chatroom, type 'leave' to leave   --\n");
   printf("-- type 'quit' to exit this chat client  --\n\n");
-
-
   
 
   for(;;) {
@@ -81,6 +76,8 @@ int main (int argc, char** argv) {
     while(line[0] == '\n'){ //to handle user hitting enter and not typing a command ORIGINAL LOOP
       printf("TATLChat> ");
       if(fgets(line, sizeof(line), stdin) == NULL) { //EOF 
+	//printf("Exiting.\n");
+	// TODO : what is this?
 	printf("\r");
 	exit(0);
       }
@@ -88,17 +85,16 @@ int main (int argc, char** argv) {
 
     command = strtok(line," \t\n"); //get just the first word
 
-    while(current != NULL){
-      if(nwords!=0){
+    while (current != NULL) {
+      if (nwords!=0) {
 	words[nwords-1] = current; 
       }
       current = strtok(0, " \t\n");
       nwords++;
     }
 
-    if (strcmp(command, quit) == 0 ){ 
+    if (strcmp(command, quit) == 0) { 
       exit(0);
-
     }
 
     if (strcmp(command, list) == 0) { //when you type list repeatedly it multiplies the room names
@@ -141,6 +137,7 @@ int main (int argc, char** argv) {
 	    if(strcmp(input, leave) == 0) { //need to supress chat_listener dying error 
 	      printf("...leaving room\n");
 	      tatl_leave_room (); 
+	      printf("Left room\n");
 	      break;
 	    }
 
@@ -152,5 +149,7 @@ int main (int argc, char** argv) {
     }
 
   }
+  
+  printf("Goodbye.\n");
   return 0;
 }

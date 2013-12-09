@@ -139,7 +139,9 @@ void* tatl_handle_new_connection (void* arg) {
 
   tmsg msg;
   msg.type = ID;
-  sprintf(msg.message, "%d", socket);
+  msg.message_id = socket;
+  printf("New user's IP address: %s", user->ip_address);
+  strcpy(msg.message, user->ip_address);
   tatl_send_protocol(socket, &msg);
 
   // MAIN CLIENT LOOP

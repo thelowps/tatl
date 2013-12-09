@@ -3,12 +3,15 @@ void aesKeyGen(unsigned char *key);
 //modifies the memory it points to to contain the key
 
 //takes in the key, the plaintext, and the number of blocks
-void aesEnc(char *aesKey, const char *ptext, long *blocks, char *ctext);
+void aesEnc(unsigned char *aesKey, const char *ptext, long *blocks, char *ctext);
 //returns a pointer to the ciphertext (and we know how many blocks it has)
 
 //takes in a key and the already modified message from the network, and the number of blocks of the already modified message
-void aesDec(char *aesKey, char *ctext, long numBlocks, char *ptext);
+void aesDec(unsigned char *aesKey, char *ctext, long numBlocks, char *ptext);
 // returns a pointer to the plaintext which will have a null term in it
+
+void AES_CBC_DEC(char *aesKey, char *ctext, long numBlocks, char *ptext);
+void AES_CBC_ENC(char *aesKey, const char *ptext, long *blocks, char *ctext);
 
 //takes in a pointer for where to put the key (32 bytes)
 void macKeyGen(unsigned char *key);
@@ -43,7 +46,7 @@ void charncpy(char *cpyTo, char *cpyFrom, int x);
 //modifies cpyTo by copying the first x chars from cpyFrom to it 
 
 //given an input, the mac key, the number of blocks of the input, and the mac it was sent
-int vrfyMAC(char *input, char *macKey, int blocks, char *sentMAC);
+int vrfyMAC(void *input, void *macKey, int blocks, char *sentMAC);
 // returns 1 if the mac of the input using the macKey matches the sentMAC, 0 if not
 
 //hash a given text

@@ -119,7 +119,8 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
   // Receive ID
   tmsg msg;
   tatl_receive_protocol(TATL_SERVER_SOCK, &msg);
-  sscanf(msg.message, "%d", &CURRENT_USER_ID);  
+  CURRENT_USER_ID = msg.message_id;
+  strcpy(SELF_IP, msg.message);
 
   // Spawn the heartbeat sender
   printf("Spawning heartbeat sender.\n");
@@ -127,7 +128,6 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
 
   // Create our client server
   pthread_create(&TATL_CLIENT_SERVER_THREAD, NULL, tatl_client_server, NULL);
-  ezsocketdata(TATL_CLIENT_SERVER_SOCK, SELF_IP, NULL);
 
   return 0;
 }
@@ -460,7 +460,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 
 }
 
-int tatl_recursive_connect ();
+int tatl_recursive_connect (const char* roomname, const char* username);
 // Listens for chats on the given socket. Assumes the socket is already set up.
 void* tatl_chat_listener (void* arg) {
   printf("Starting a chat listener.\n");
@@ -476,22 +476,41 @@ void* tatl_chat_listener (void* arg) {
     message_size = tatl_receive_protocol(*listener_socket, &msg);
 
     // HANDLE CLOSED CONNECTIONS //
-    if (message_size < 0) {
+    printf("Received a message...\n");
+    if (message_size < 0 || msg.type == LEAVE_ROOM) {
+      printf("Closing a threaded connection.\n");
+      
       // If the other side has closed the socket, exit gracefully
+      ezclose(*listener_socket);
       *listener_socket = 0;
-       
+      if (listener_socket == &TATL_PREV_SOCK) TATL_PREV_IP[0] = 0;
+      else if (listener_socket == &TATL_NEXT_SOCK) TATL_NEXT_IP[0] = 0;
+      
+      // check if our main thread is attempting to leave the room.
+      // If so, there is nothing more to be done here.
+      if (CURRENT_CLIENT_STATUS == NOT_IN_ROOM) {
+	printf("Exiting listener thread.\n");
+	pthread_exit(NULL);
+      }
+
       // If we lost our PREV, attempt a new connection to the head.
       if (listener_socket == &TATL_PREV_SOCK) {
-	int failure = ezconnect(&TATL_PREV_SOCK, CURRENT_HEAD_IP, TATL_SERVER_PORT);
+	int failure = 0, is_new_head = 0;
+	if (strcmp(CURRENT_HEAD_IP, SELF_IP) == 0) {
+	  failure = is_new_head = 1;
+	} else {
+	  failure = is_new_head = ezconnect(&TATL_PREV_SOCK, CURRENT_HEAD_IP, TATL_SERVER_PORT);
+	}
+
 	if (!failure) {
-	  if (!tatl_recursive_connect()) {
-	    // we are good!
+	  if (!tatl_recursive_connect(CURRENT_ROOM, CURRENT_USERNAME)) {
 	    printf("Connected to a new PREV\n");
 	  } else {
-	    // there is something really wrong with the network...
+	    is_new_head = 1;
 	  }
-
-	} else {
+	}
+	
+	if (is_new_head) {
 	  printf("We are the new head! Telling all my friends =)\n");
 	  if (TATL_NEXT_SOCK) {
 	    strcpy(CURRENT_HEAD_IP, SELF_IP);
@@ -527,7 +546,6 @@ void* tatl_chat_listener (void* arg) {
       strcpy(chat.message, plain_text);
       strcpy(chat.sender, msg.username);
       strcpy(chat.roomname, CURRENT_ROOM);
-      printf("Received a chat!\n");
       listener_function(chat);
       free(plain_text);
 
@@ -540,6 +558,7 @@ void* tatl_chat_listener (void* arg) {
       printf("Setting new head IP: %s\n", CURRENT_HEAD_IP);
       if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
     }
+
   }
   
 }
@@ -553,10 +572,7 @@ void tatl_join_chat_listener (pthread_t* thread) {
   pthread_join(*thread, NULL);
 }
 
-
-int tatl_recursive_connect ();
 void* tatl_client_server (void* arg);
-
 // Request entering a room
 int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (tatl_sanity_check(CLIENT, NOT_IN_ROOM)) {
@@ -614,8 +630,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
     int entered_room = 0;
     if (!alone && success) {
       // Find our previous
-      printf("Initiating a recursive connection!\n");
-      int failure = tatl_recursive_connect();
+      int failure = tatl_recursive_connect(roomname, username);
       if (!failure) {
 	entered_room = 1;
       } else {
@@ -642,11 +657,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
       return -1;
     }
 
-    // Listen for our next
-    // TODO : join the thread
     if (entered_room) {
-      //if (alone) CURRENTLY_IS_HEAD = 1;
-      //else CURRENTLY_IS_HEAD = 0;
       CURRENT_CLIENT_STATUS = IN_ROOM;
       strcpy(CURRENT_ROOM, roomname);
       strcpy(CURRENT_USERNAME, username);
@@ -669,21 +680,28 @@ void* tatl_client_server (void* arg) {
     printf("Client server. Waiting for the worms.\n");
     int new_connection = ezaccept(TATL_CLIENT_SERVER_SOCK);
     if (new_connection < 0) {
-      printf("Error accepting a client.\n");
+      printf("Error accepting a connection....\n");
       continue;
     }
-     
-    printf("Accepted a client.\n");
-    ezpeerdata(new_connection, TATL_NEXT_IP, NULL);
-    printf("Dat peerdata tho\n");
 
-    if (!TATL_NEXT_SOCK) {
-      // We are willing to initiate a NEXT connection here. Authenticate
+    printf("Opened a connection.\n");
+    // Receive request data
+    tmsg msg;
+    tatl_receive_protocol(new_connection, &msg);
+    printf("Request is for room: %s\n", msg.roomname);
+    printf("Current room is: %s\n", CURRENT_ROOM);
+    if (!TATL_NEXT_SOCK && !strcmp(CURRENT_ROOM, msg.roomname)) {
+      printf("Entering diffie_hellman.\n");
+      // We are willing to initiate a NEXT connection, and this request is for 
+      // the room that we are in. Good! Authenticate.
       if (tatl_diffie_hellman(new_connection, NULL)) {
+	printf("Accepted a new NEXT.\n");
+	// Success! We authenticated and have our next.
 	TATL_NEXT_SOCK = new_connection;
+	ezpeerdata(new_connection, TATL_NEXT_IP, NULL);
+	printf("NEXT IP is: %s\n", TATL_NEXT_IP);
 
 	// Inform them about the new head
-	tmsg msg;
 	msg.type = HEAD;
 	strcpy(msg.message, CURRENT_HEAD_IP);
 	tatl_send_protocol(TATL_NEXT_SOCK, &msg);
@@ -695,23 +713,29 @@ void* tatl_client_server (void* arg) {
        
     } else {
       // We are already connected to a NEXT. Refer the connection elsewhere
-      tmsg msg;
       msg.type = FAILURE;
       strcpy(msg.message, TATL_NEXT_IP);
       tatl_send_protocol(new_connection, &msg);
       ezclose(new_connection);
+      printf("Rejecting an attempt to connect. Referring to %s\n", TATL_NEXT_IP);
     }
   }
 }
 
-int tatl_recursive_connect () {
-  printf("Recursive connect. Receiving on socket %d\n", TATL_PREV_SOCK);
+int tatl_recursive_connect (const char* roomname, const char* username) {
   char peer [20];
   int peersock;
   ezpeerdata(TATL_PREV_SOCK, peer, &peersock);
-  printf("Peer ip is: %s, socket %d\n", peer, peersock);
+  printf("Recursively attempting to connect to ip: %s\n", peer);
 
+  // Send request
   tmsg msg;
+  msg.type = JOIN_ROOM;
+  strcpy(msg.roomname, roomname);
+  strcpy(msg.username, username);
+  tatl_send_protocol(TATL_PREV_SOCK, &msg);
+  
+  // Receive response
   tatl_receive_protocol(TATL_PREV_SOCK, &msg);
   
   if (msg.type == AUTHENTICATION) {
@@ -726,11 +750,17 @@ int tatl_recursive_connect () {
     }
   } 
 
-  printf("No dice. Attempting next ip: %s\n", msg.message);
   close(TATL_PREV_SOCK);
   TATL_PREV_SOCK = 0;
+
+  printf("No dice. Attempting next ip: %s\n", msg.message);
+  if (!(*msg.message)) {
+    printf("IP referred to us is invalid -- recursion failed.");
+    return -1;
+  }
+
   ezconnect(&TATL_PREV_SOCK, msg.message, TATL_SERVER_PORT);
-  return tatl_recursive_connect();
+  return tatl_recursive_connect(roomname, username);
 }
 
 // Send a chat to the current chatroom
@@ -778,14 +808,24 @@ int tatl_leave_room () {
   CURRENT_ROOM[0] = 0;
 
   if (TATL_PREV_SOCK) {
+    printf("Joining previous\n");
+    tatl_send_protocol(TATL_PREV_SOCK, &msg);
     ezclose(TATL_PREV_SOCK);
+    TATL_PREV_SOCK = 0;
+    TATL_PREV_IP[0] = 0;
     tatl_join_chat_listener(&TATL_PREV_LISTENER_THREAD);
   }
 
   if (TATL_NEXT_SOCK) {
+    printf("Joining next\n");
+    tatl_send_protocol(TATL_NEXT_SOCK, &msg);
     ezclose(TATL_NEXT_SOCK);
+    TATL_NEXT_SOCK = 0;
+    TATL_NEXT_IP[0] = 0;
     tatl_join_chat_listener(&TATL_NEXT_LISTENER_THREAD);
   }
+ 
+  printf("Successfully exited the room.\n");
   return 0;
 }
 

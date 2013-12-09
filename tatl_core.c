@@ -94,7 +94,8 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     }
   } else if (type == 'I') {
     msg->type = ID;
-    strcpy(msg->message, raw_msg);
+    sscanf(strtok(raw_msg, ":"), "%lu", &(msg->message_id));
+    strcpy(msg->message, strtok(NULL, ":"));
   } else if (type == 'N') {
     msg->type = LISTENER;
     strcpy(msg->message, raw_msg);
@@ -142,7 +143,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
     //tatl_print_hex(temp, msg->message_size);
     printf("\n");
   } else if (msg->type == ID) {
-    sprintf(raw_msg, "I%s", msg->message);
+    sprintf(raw_msg, "I%lu:%s", msg->message_id, msg->message);
   } else if (msg->type == LISTENER) {
     sprintf(raw_msg, "N%s", msg->message);
   } else if (msg->type == HEARTBEAT) {

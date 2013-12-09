@@ -82,7 +82,6 @@ int tatl_init_server (int port, int flags) {
   //do I need to call a pthread_join?
   
   ezlisten(&TATL_SOCK, port);
-//   ezlisten2(&TATL_SOCK, port);
   return 0;
 
 }
@@ -206,41 +205,7 @@ int tatl_place_in_room (tmsg* msg, userdata* user) {
     tatl_send_protocol(user->socket, &resp);    
     return 0;    
   }
-  
-  // Authenticate
-  if (room_existed) {
-    // Set the gatekeeper as the first person in the group
-    struct node* n = room->users_head;
-    userdata* u = *((userdata**)(n->value));
-    int gatekeeper = u->listener_socket;
-
-    // TODO : gatekeeping needs to be on separate socket
-    resp.type = AUTHENTICATION;
-    resp.message_size = 0;
-    tatl_send_protocol(user->socket, &resp);
-
-    // Allow users to create a secret g^abh
-    tatl_receive_protocol(user->socket, &resp);
-    tatl_send_protocol(gatekeeper, &resp);
-    tatl_receive_protocol(gatekeeper, &resp);
-    tatl_send_protocol(user->socket, &resp);
-
-    // user handshakes
-    tatl_receive_protocol(user->socket, &resp);
-    tatl_send_protocol(gatekeeper, &resp);
-    tatl_receive_protocol(gatekeeper, &resp);
-    tatl_send_protocol(user->socket, &resp);
-
-    tatl_receive_protocol(gatekeeper, &resp);
-    tatl_send_protocol(user->socket, &resp);
-    tatl_receive_protocol(user->socket, &resp);
-    tatl_send_protocol(gatekeeper, &resp);
-
-    // key send
-    tatl_receive_protocol(gatekeeper, &resp);
-    tatl_send_protocol(user->socket, &resp);
-  } 
-  
+    
   // Add the user to the group
   resp.type = SUCCESS;
   resp.message[0] = 0;
@@ -378,7 +343,7 @@ userdata* tatl_create_userdata (int socket) {
   user->room[0] = 0;
   user->socket = socket;
   user->listener_socket = 0;
-  ezsocketdata(socket, (char*)&(user->ip_address), &(user->port));
+  ezpeerdata(socket, (char*)&(user->ip_address), &(user->port));
 
   char key [20];
   sprintf(key, "%d", socket);

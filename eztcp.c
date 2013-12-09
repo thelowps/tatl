@@ -100,6 +100,7 @@ int ezlisten (int* sock, int port) {
     if (EZ_PRINT_ERROR) perror("Error when binding socket");
     return err;
   }
+
   if ((err = listen(listenfd, 1)) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when listening on socket");
     return err;
@@ -110,9 +111,10 @@ int ezlisten (int* sock, int port) {
 }
 
 int ezaccept (int sock) {
-  socklen_t clilen;
   struct sockaddr_in cliaddr;
+  socklen_t clilen = sizeof(cliaddr);
   int conn;
+  printf("Attempting accept on socket: %d\n", sock);
   if ((conn = accept(sock, (struct sockaddr *)&cliaddr, &clilen)) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when accepting new client");
   }
@@ -126,63 +128,74 @@ int ezclose (int sock) {
 void ezsocketdata(int sock, char* ip, int* port) {
   struct sockaddr_in sa;
   socklen_t sa_len = sizeof(sa);
+
   getsockname(sock, (struct sockaddr*)&sa, &sa_len);
   strcpy(ip, inet_ntoa(sa.sin_addr));
   *port = (int)ntohs(sa.sin_port);
+  printf("port = %d\n", *port);
+}
+
+void ezpeerdata(int sock, char* ip, int* port) {
+  struct sockaddr_in sa;
+  socklen_t sa_len = sizeof(sa);
+
+  getpeername(sock, (struct sockaddr*)(&sa), &sa_len);
+  if (ip) strcpy(ip, inet_ntoa(sa.sin_addr));
+  if (port) *port = (int)ntohs(sa.sin_port);
 }
 
 int ezconnect2 (int* sock, const char* ip, const char* port, char * server_ip) {
-int sockfd;  
-struct addrinfo hints, *servinfo, *p;
-int rv;
+  int sockfd;  
+  struct addrinfo hints, *servinfo, *p;
+  int rv;
 
-char ipstr[INET_ADDRSTRLEN];
+  char ipstr[INET_ADDRSTRLEN];
+ 
 
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
+  hints.ai_socktype = SOCK_STREAM;
 
-memset(&hints, 0, sizeof hints);
-hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
-hints.ai_socktype = SOCK_STREAM;
-
-if ((rv = getaddrinfo(ip, port, &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo(ip, port, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     exit(1);
-}
+  }
 
-// loop through all the results and connect to the first we can
-for(p = servinfo; p != NULL; p = p->ai_next) {
+  // loop through all the results and connect to the first we can
+  for(p = servinfo; p != NULL; p = p->ai_next) {
     if ((sockfd = socket(p->ai_family, p->ai_socktype,
-            p->ai_protocol)) == -1) {
-        perror("socket");
-        continue;
+			 p->ai_protocol)) == -1) {
+      perror("socket");
+      continue;
     }
 
     if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-        close(sockfd);
-        perror("connect");
-        continue;
+      close(sockfd);
+      perror("connect");
+      continue;
     }
 
 
-  break;
-}
+    break;
+  }
 
-if (p == NULL) {
+  if (p == NULL) {
     // looped off the end of the list with no connection
     fprintf(stderr, "failed to connect\n");
     exit(2);
-}
+  }
 
-//CODE TO GET THE IP ADDRESS FOR CLIENT TO STORE//
-struct in_addr *addr;
-struct sockaddr_in *ipv = (struct sockaddr_in *)p->ai_addr;
-addr = &(ipv->sin_addr);
+  //CODE TO GET THE IP ADDRESS FOR CLIENT TO STORE//
+  struct in_addr *addr;
+  struct sockaddr_in *ipv = (struct sockaddr_in *)p->ai_addr;
+  addr = &(ipv->sin_addr);
 
-inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
+  inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
 
-strcpy(server_ip, ipstr);
+  strcpy(server_ip, ipstr);
 
 
-freeaddrinfo(servinfo); // all done with this structure
+  freeaddrinfo(servinfo); // all done with this structure
 
 
   *sock = sockfd;

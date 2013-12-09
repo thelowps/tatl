@@ -22,7 +22,7 @@ int TATL_SERVER_SOCK, TATL_PREV_SOCK, TATL_NEXT_SOCK, TATL_CLIENT_SERVER_SOCK;
 char TATL_NEXT_IP[16] = {0}, TATL_PREV_IP[16] = {0}, TATL_SERVER_IP[16] = {0};
 int TATL_SERVER_PORT;
 
-// STATE DATA //
+//s STATE DATA //
 extern TATL_MODE CURRENT_MODE;
 typedef enum {IN_ROOM, NOT_IN_ROOM} TATL_CLIENT_STATUS;
 TATL_CLIENT_STATUS CURRENT_CLIENT_STATUS = NOT_IN_ROOM;
@@ -31,6 +31,10 @@ char CURRENT_USERNAME [TATL_MAX_USERNAME_SIZE] = {0};
 char CURRENT_ROOM [TATL_MAX_ROOMNAME_SIZE] = {0};
 int  CURRENT_USER_ID = -1;
 unsigned long CURRENT_CHAT_ID = 0;
+int CURRENTLY_IS_HEAD = 0;
+int CURRENTLY_PREV_IS_HEAD = 0;
+char CURRENT_HEAD_IP [16];
+char SELF_IP [16];
 
 // SECURITY //
 typedef struct {
@@ -90,16 +94,16 @@ void tatl_spawn_heartbeat_sender() {
   pthread_create(&TATL_HEARTBEAT_THREAD, NULL, tatl_send_heartbeat, NULL); 
 }
 
-  
+void* tatl_client_server(void* arg);
 int tatl_init_client (const char* server_ip, const char* server_port, int flags) {  
   if (tatl_sanity_check(NOT_INITIALIZED, NOT_IN_ROOM)) {
     return -1;
   }
-  
+
   if (ezconnect2(&TATL_SERVER_SOCK, server_ip, server_port, TATL_SERVER_IP) < 0) {
     return -1;
   }
-   
+
   // Set flags
   CURRENT_MODE = CLIENT;
   TATL_SERVER_PORT = atoi(server_port);
@@ -110,7 +114,7 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
   mpz_init(TATL_DEFAULT_MULT_GROUP.p);
   mpz_set_ui(TATL_DEFAULT_MULT_GROUP.gen, 103);
   mpz_set_str(TATL_DEFAULT_MULT_GROUP.p, "179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624225795083", 10);
-  
+
 
   // Receive ID
   tmsg msg;
@@ -120,6 +124,10 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
   // Spawn the heartbeat sender
   printf("Spawning heartbeat sender.\n");
   tatl_spawn_heartbeat_sender();
+
+  // Create our client server
+  pthread_create(&TATL_CLIENT_SERVER_THREAD, NULL, tatl_client_server, NULL);
+  ezsocketdata(TATL_CLIENT_SERVER_SOCK, SELF_IP, NULL);
 
   return 0;
 }
@@ -135,7 +143,7 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
 
   // Send a random number and expect it +1 back
   mpz_urandomm(check, state, TATL_DEFAULT_MULT_GROUP.p);
-  
+
 #ifdef SEC_DEBUG
   printf("VERIFYING OTHER PARTY: Random number to send:\n");
   mpz_out_str(stdout, 10, check);
@@ -164,17 +172,17 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
 #ifdef SEC_DEBUG
   printf("VERIFYING OTHER PARTY: Received encrypted number: \n%s\n\n", msg.message);
 #endif
-  
+
   // Decrypt it
   mpz_mul(resp, resp, inverse);
   mpz_mod(resp, resp, TATL_DEFAULT_MULT_GROUP.p);
-  
+
 #ifdef SEC_DEBUG
   printf("VERIFYING OTHER PARTY: Decrypted response: \n");
   mpz_out_str(stdout, 10, resp);
   printf("\n\n");
 #endif
-  
+
   mpz_add_ui(check, check, 1);
   if (!mpz_cmp(check, resp)) {
 #ifdef SEC_DEBUG
@@ -182,7 +190,7 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
 #endif
     return 0;
   } 
-  
+
 #ifdef SEC_DEBUG
   printf("VERIFYING OTHER PARTY: Party verified.\n\n");
 #endif
@@ -252,19 +260,19 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   mpz_init(gab);
   //mpz_init(pass_hash);
   mpz_init(gabh);
-  
+
   // Generate a random number to seed our RNG
   unsigned long seed = 0;
   FILE* dev_random = fopen("/dev/urandom", "r");
   fread(&seed, sizeof(seed), 1, dev_random);
   fclose(dev_random);
-  
+
   // Randomly generate our secret number, a
   gmp_randstate_t state;
   gmp_randinit_mt(state);
   gmp_randseed_ui(state, seed);  
   mpz_urandomm(a, state, TATL_DEFAULT_MULT_GROUP.p);
-  
+
   // Calculate g^a and send it to the other party
   mpz_powm(ga, TATL_DEFAULT_MULT_GROUP.gen, a, TATL_DEFAULT_MULT_GROUP.p);
   char* ga_str = mpz_get_str(NULL, 10, ga);
@@ -272,7 +280,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   msg.message_size = strlen(ga_str)+1;
   tatl_send_protocol(socket, &msg);
   free(ga_str);
-  
+
   // Receive g^b (if we haven't already) and set it
   if (!initial) {
     tatl_receive_protocol(socket, &msg); 
@@ -302,7 +310,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   mpz_out_str(stdout, 10, gabh);
   printf("\n\n");
 #endif
-  
+
   // Prepare for our random number handshake
   mpz_t check, resp, gbh, exponent, inverse;
   mpz_init(check);
@@ -357,7 +365,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
       mpz_import(enc_key, 16, 1, sizeof(char), 1, 0, CURRENT_AES_KEY);  
       mpz_mul(enc_key, enc_key, gabh);
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
-      
+
       // encrypt the MAC key
       mpz_import(enc_mac_key, 32, 1, sizeof(char), 1, 0, CURRENT_MAC_KEY);
       mpz_mul(enc_mac_key, enc_mac_key, gabh);
@@ -376,7 +384,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 #endif
       free(enc_key_str);
       free(enc_mac_key_str);
- 
+
     } else {
       tatl_receive_protocol(socket, &msg);
       mpz_set_str(enc_key, strtok(msg.message, ":"), 10);
@@ -391,7 +399,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
       mpz_mul(enc_key, enc_key, inverse);
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
       mpz_export(CURRENT_AES_KEY, NULL, 1, sizeof(char), 1, 0, enc_key);     
- 
+
       // Decrypt the MAC key
       mpz_mul(enc_mac_key, enc_mac_key, inverse);
       mpz_mod(enc_mac_key, enc_mac_key, TATL_DEFAULT_MULT_GROUP.p);
@@ -401,7 +409,7 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
       printf("Decrypted key in decimal: \n");
       mpz_out_str(stdout, 10, enc_key);
       printf("\n\n");
-      
+
       printf("Decrypted key in hex: ");
       int i;
       for (i = 0; i < 16; ++i) {
@@ -449,28 +457,57 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 
     return 0;
   }
-  
+
 }
 
+int tatl_recursive_connect ();
 // Listens for chats on the given socket. Assumes the socket is already set up.
 void* tatl_chat_listener (void* arg) {
   printf("Starting a chat listener.\n");
-  int listener_socket = *((int*)arg);
+  int* listener_socket = (int*)arg;
   int* forward_socket = NULL;
-  forward_socket = listener_socket == TATL_PREV_SOCK? &TATL_NEXT_SOCK : &TATL_PREV_SOCK;
-
+  forward_socket = *listener_socket == TATL_PREV_SOCK? &TATL_NEXT_SOCK : &TATL_PREV_SOCK;
+  
   tmsg msg;
   tchat chat;
   int message_size;
   while (1) {  
     memset(&msg, 0, sizeof(msg));
-    // TODO : what if we close this socket?
-    message_size = tatl_receive_protocol(listener_socket, &msg);
+    message_size = tatl_receive_protocol(*listener_socket, &msg);
 
+    // HANDLE CLOSED CONNECTIONS //
     if (message_size < 0) {
       // If the other side has closed the socket, exit gracefully
+      *listener_socket = 0;
+       
+      // If we lost our PREV, attempt a new connection to the head.
+      if (listener_socket == &TATL_PREV_SOCK) {
+	int failure = ezconnect(&TATL_PREV_SOCK, CURRENT_HEAD_IP, TATL_SERVER_PORT);
+	if (!failure) {
+	  if (!tatl_recursive_connect()) {
+	    // we are good!
+	    printf("Connected to a new PREV\n");
+	  } else {
+	    // there is something really wrong with the network...
+	  }
+
+	} else {
+	  printf("We are the new head! Telling all my friends =)\n");
+	  if (TATL_NEXT_SOCK) {
+	    strcpy(CURRENT_HEAD_IP, SELF_IP);
+	    msg.type = HEAD;
+	    strcpy(msg.message, CURRENT_HEAD_IP);
+	    tatl_send_protocol(TATL_NEXT_SOCK, &msg);
+	  } else {
+	    printf("We are alone in this world.\n");
+	  }
+	}
+      }
+       
+      printf("Exiting listener thread.\n");
       pthread_exit(NULL);
 
+      // HANDLE A CHAT //
     } else if (msg.type == CHAT && listener_function) {
       // We have received a chat
 #ifdef SEC_DEBUG
@@ -479,25 +516,32 @@ void* tatl_chat_listener (void* arg) {
       tatl_print_hex(msg.message, msg.message_size);
       printf("\n");
 #endif
-      
+
       char* plain_text = NULL;      
       int success = deconstructMessage(CURRENT_AES_KEY, CURRENT_MAC_KEY, 
 				       &plain_text, (unsigned char*)msg.message);
-      
+
       if (!success) {
 	printf("Received a message with a Bad MAC\n\n");
       }
       strcpy(chat.message, plain_text);
       strcpy(chat.sender, msg.username);
       strcpy(chat.roomname, CURRENT_ROOM);
+      printf("Received a chat!\n");
       listener_function(chat);
-      
+      free(plain_text);
+
       if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
 
-      free(plain_text);
-    } 
+     
+      // HANDLE A HEAD MESSAGE //
+    } else if (msg.type == HEAD) {
+      strcpy(CURRENT_HEAD_IP, msg.message);
+      printf("Setting new head IP: %s\n", CURRENT_HEAD_IP);
+      if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
+    }
   }
-
+  
 }
 
 
@@ -518,7 +562,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (tatl_sanity_check(CLIENT, NOT_IN_ROOM)) {
     return -1;
   }
-  
+
   // SEND JOIN REQUEST
   tmsg msg;
   msg.type = JOIN_ROOM;
@@ -533,7 +577,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (msg.type == FAILURE) {
     return -1;
   }
-  
+
   // TODO : prompt the user for the password
   hash_pass("b41100ns", CURRENT_PASS_HASH);
 
@@ -544,16 +588,17 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
     // If someone is already in the room, connect
     if (*(msg.message)) {
       alone = 0;
-      
+
       printf("Room has someone in it. msg.message is: %s\n", msg.message);
       char* member, *member_ip;
       member = strtok(msg.message, ":");
       member_ip = strtok(NULL, ":");
-      
+
       // Find the first person available for connection
       while (1) {
 	printf("Attempting to connect to %s on ip %s\n", member, member_ip);
 	if (!ezconnect(&TATL_PREV_SOCK, member_ip, TATL_SERVER_PORT)) {
+
 	  printf("Connected to %s\n", member);
 	  success = 1;
 	  break;
@@ -579,8 +624,11 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
       }
 
     } else if (alone) {
+      entered_room = 1;
       aesKeyGen(CURRENT_AES_KEY);
       macKeyGen(CURRENT_MAC_KEY);
+      strcpy(CURRENT_HEAD_IP, SELF_IP);
+      printf("Setting head ip = %s", CURRENT_HEAD_IP);
 #ifdef SEC_DEBUG
       printf("Generated AES key for room: ");
       tatl_print_hex(CURRENT_AES_KEY, 16);
@@ -588,7 +636,7 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
       tatl_print_hex(CURRENT_MAC_KEY, 32);
       printf("\n");
 #endif 
-      
+
     } else if (!alone && !success) {
       tatl_set_error("Could not connect to anyone in the room.\n");
       return -1;
@@ -597,11 +645,12 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
     // Listen for our next
     // TODO : join the thread
     if (entered_room) {
+      //if (alone) CURRENTLY_IS_HEAD = 1;
+      //else CURRENTLY_IS_HEAD = 0;
       CURRENT_CLIENT_STATUS = IN_ROOM;
       strcpy(CURRENT_ROOM, roomname);
       strcpy(CURRENT_USERNAME, username);
       strcpy(members, msg.message);
-      pthread_create(&TATL_CLIENT_SERVER_THREAD, NULL, tatl_client_server, NULL);
     }    
 
     return 0;
@@ -615,30 +664,42 @@ void* tatl_client_server (void* arg) {
     perror("Could not set up client server");
     pthread_exit(NULL);
   }
-  
+
   while (1) {
     printf("Client server. Waiting for the worms.\n");
-    TATL_NEXT_SOCK = ezaccept(TATL_CLIENT_SERVER_SOCK);
-    if (TATL_NEXT_SOCK < 0) {
+    int new_connection = ezaccept(TATL_CLIENT_SERVER_SOCK);
+    if (new_connection < 0) {
       printf("Error accepting a client.\n");
       continue;
     }
+     
     printf("Accepted a client.\n");
-    ezpeerdata(TATL_NEXT_SOCK, TATL_NEXT_IP, NULL);
+    ezpeerdata(new_connection, TATL_NEXT_IP, NULL);
     printf("Dat peerdata tho\n");
-    
-    if (tatl_diffie_hellman(TATL_NEXT_SOCK, NULL)) {
-      tatl_spawn_chat_listener(&TATL_NEXT_SOCK, &TATL_NEXT_LISTENER_THREAD);
-      
-      // Deny everyone else
+
+    if (!TATL_NEXT_SOCK) {
+      // We are willing to initiate a NEXT connection here. Authenticate
+      if (tatl_diffie_hellman(new_connection, NULL)) {
+	TATL_NEXT_SOCK = new_connection;
+
+	// Inform them about the new head
+	tmsg msg;
+	msg.type = HEAD;
+	strcpy(msg.message, CURRENT_HEAD_IP);
+	tatl_send_protocol(TATL_NEXT_SOCK, &msg);
+	
+	tatl_spawn_chat_listener(&TATL_NEXT_SOCK, &TATL_NEXT_LISTENER_THREAD);
+      } else {
+	printf("Rejected a connection for authentication reasons.\n");
+      }
+       
+    } else {
+      // We are already connected to a NEXT. Refer the connection elsewhere
       tmsg msg;
       msg.type = FAILURE;
       strcpy(msg.message, TATL_NEXT_IP);
-      while (1) {
-	int reject = ezaccept(TATL_CLIENT_SERVER_SOCK);
-	tatl_send_protocol(reject, &msg);
-	ezclose(reject);
-      }
+      tatl_send_protocol(new_connection, &msg);
+      ezclose(new_connection);
     }
   }
 }

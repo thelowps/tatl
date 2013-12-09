@@ -130,9 +130,8 @@ void ezsocketdata(int sock, char* ip, int* port) {
   socklen_t sa_len = sizeof(sa);
 
   getsockname(sock, (struct sockaddr*)&sa, &sa_len);
-  strcpy(ip, inet_ntoa(sa.sin_addr));
-  *port = (int)ntohs(sa.sin_port);
-  printf("port = %d\n", *port);
+  if (ip) strcpy(ip, inet_ntoa(sa.sin_addr));
+  if (port) *port = (int)ntohs(sa.sin_port);
 }
 
 void ezpeerdata(int sock, char* ip, int* port) {

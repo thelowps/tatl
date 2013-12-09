@@ -108,6 +108,9 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
       char* cipher = buf + strlen(buf)+1;
       memcpy(msg->message, cipher, msg->message_size);
     }
+  } else if (type == 'D') {
+    msg->type = HEAD;
+    strcpy(msg->message, raw_msg);
   }
 
   free(raw_temp);
@@ -148,6 +151,8 @@ void tatl_send_protocol (int socket, tmsg* msg) {
     sprintf(raw_msg, "A%u:", msg->message_size);
     msg_size = strlen(raw_msg) + msg->message_size + 1;
     memcpy(raw_msg+strlen(raw_msg), msg->message, msg->message_size);
+  } else if (msg->type == HEAD) {
+    sprintf(raw_msg, "D%s", msg->message);
   }
 
   if (msg_size == 0) {

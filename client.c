@@ -5,8 +5,8 @@
 #include <stdlib.h>
 
 void handle_chat (tchat chat) {
-  printf("\n%s> %s\n", chat.sender, chat.message);
-  printf("%s> ", chat.roomname);
+  printf("%s> %s\n%s>", chat.sender, chat.message, chat.roomname);
+  //printf("%s> ", chat.roomname);
   fflush(stdout);
 }
 
@@ -138,7 +138,6 @@ int main (int argc, char** argv) {
 	  printf("-- type '/leave' to leave this chatroom\n\n");
 	  printf("%s> ", roomname);
 	  while(get_user_input(input, n, "")) {
-	
 	    if(strcmp(input, leave) == 0) { //need to supress chat_listener dying error 
 	      printf("...leaving room\n");
 	      tatl_leave_room (); 

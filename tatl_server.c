@@ -169,8 +169,7 @@ void* tatl_handle_new_connection (void* arg) {
       tatl_setup_listener(&msg, user);
       return NULL;
     } else if (msg.type == HEARTBEAT) {
-	tatl_handle_heartbeat(&msg);
-      
+	tatl_handle_heartbeat(&msg);      
     }
 
 #ifdef DEBUG

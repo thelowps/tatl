@@ -17,13 +17,12 @@
 //#define DEBUG
 //#define SEC_DEBUG
 
-// The socket to communicate with the server on
-int TATL_SOCK, TATL_PREV_SOCK, TATL_NEXT_SOCK, TATL_LISTENER_SOCK;
-char TATL_NEXT_IP[16], TATL_PREV_IP[16];
-
-char TATL_SERVER_IP[1024] = {0};
+// SOCKETS //
+int TATL_SERVER_SOCK, TATL_PREV_SOCK, TATL_NEXT_SOCK, TATL_CLIENT_SERVER_SOCK;
+char TATL_NEXT_IP[16] = {0}, TATL_PREV_IP[16] = {0}, TATL_SERVER_IP[16] = {0};
 int TATL_SERVER_PORT;
 
+// STATE DATA //
 extern TATL_MODE CURRENT_MODE;
 typedef enum {IN_ROOM, NOT_IN_ROOM} TATL_CLIENT_STATUS;
 TATL_CLIENT_STATUS CURRENT_CLIENT_STATUS = NOT_IN_ROOM;
@@ -31,7 +30,7 @@ TATL_CLIENT_STATUS CURRENT_CLIENT_STATUS = NOT_IN_ROOM;
 char CURRENT_USERNAME [TATL_MAX_USERNAME_SIZE] = {0};
 char CURRENT_ROOM [TATL_MAX_ROOMNAME_SIZE] = {0};
 int  CURRENT_USER_ID = -1;
-unsigned int CURRENT_CHAT_ID = 0;
+unsigned long CURRENT_CHAT_ID = 0;
 
 // SECURITY //
 typedef struct {
@@ -45,12 +44,14 @@ unsigned char CURRENT_AES_KEY [16];
 unsigned char CURRENT_MAC_KEY [32];
 unsigned char CURRENT_PASS_HASH [32];
 
-// Function to be called when a chat message from others in the room is received
-void (*listener_function)(tchat chat);
+// THREADING //
 pthread_t TATL_PREV_LISTENER_THREAD, TATL_NEXT_LISTENER_THREAD;
 pthread_t TATL_HEARTBEAT_THREAD;
 pthread_t TATL_CLIENT_SERVER_THREAD;
 
+
+// Function to be called when a chat message from others in the room is received
+void (*listener_function)(tchat chat);
 void tatl_set_chat_listener (void (*listen)(tchat chat)) {
   listener_function = listen;
 }
@@ -69,25 +70,25 @@ int tatl_sanity_check (TATL_MODE expected_mode, TATL_CLIENT_STATUS expected_stat
   return 0;
 }
 
-
 void* tatl_send_heartbeat (void* arg) {
   tmsg msg;
   msg.type = HEARTBEAT;
-  while(1){
+  while(1) {
     usleep(550000000);
-    strcpy(msg.roomname, CURRENT_ROOM);
-    strcpy(msg.username, CURRENT_USERNAME);
-    tatl_send_protocol(TATL_SOCK, &msg); 
+    if (CURRENT_CLIENT_STATUS == IN_ROOM) {
+      printf("Sending heartbeat.\n");
+      strcpy(msg.roomname, CURRENT_ROOM);
+      strcpy(msg.username, CURRENT_USERNAME);
+      tatl_send_protocol(TATL_SERVER_SOCK, &msg); 
+    }
   }
 
   return 0;
 }
 
-
 void tatl_spawn_heartbeat_sender() {
   pthread_create(&TATL_HEARTBEAT_THREAD, NULL, tatl_send_heartbeat, NULL); 
 }
-
 
   
 int tatl_init_client (const char* server_ip, const char* server_port, int flags) {  
@@ -95,7 +96,7 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
     return -1;
   }
   
-  if (ezconnect2(&TATL_SOCK, server_ip, server_port, TATL_SERVER_IP) < 0) {
+  if (ezconnect2(&TATL_SERVER_SOCK, server_ip, server_port, TATL_SERVER_IP) < 0) {
     return -1;
   }
    
@@ -103,9 +104,7 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
   CURRENT_MODE = CLIENT;
   TATL_SERVER_PORT = atoi(server_port);
   TATL_PREV_SOCK = TATL_NEXT_SOCK = 0;
-  TATL_NEXT_IP[0] = 0;
-  TATL_PREV_IP[0] = 0;
-  
+
   // Initialize multiplicative group for diffie-hellman key exchange
   mpz_init(TATL_DEFAULT_MULT_GROUP.gen);
   mpz_init(TATL_DEFAULT_MULT_GROUP.p);
@@ -115,8 +114,12 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
 
   // Receive ID
   tmsg msg;
-  tatl_receive_protocol(TATL_SOCK, &msg);
+  tatl_receive_protocol(TATL_SERVER_SOCK, &msg);
   sscanf(msg.message, "%d", &CURRENT_USER_ID);  
+
+  // Spawn the heartbeat sender
+  printf("Spawning heartbeat sender.\n");
+  tatl_spawn_heartbeat_sender();
 
   return 0;
 }
@@ -461,6 +464,7 @@ void* tatl_chat_listener (void* arg) {
   int message_size;
   while (1) {  
     memset(&msg, 0, sizeof(msg));
+    // TODO : what if we close this socket?
     message_size = tatl_receive_protocol(listener_socket, &msg);
 
     if (message_size < 0) {
@@ -488,7 +492,6 @@ void* tatl_chat_listener (void* arg) {
       strcpy(chat.roomname, CURRENT_ROOM);
       listener_function(chat);
       
-      //printf("Forward socket: %p, %d\n", forward_socket, *forward_socket);
       if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
 
       free(plain_text);
@@ -498,17 +501,18 @@ void* tatl_chat_listener (void* arg) {
 }
 
 
-void tatl_spawn_chat_listener (int* socket) {
-  pthread_create(&TATL_LISTENER_THREAD, NULL, tatl_chat_listener, socket); 
+void tatl_spawn_chat_listener (int* socket, pthread_t* thread) {
+  pthread_create(thread, NULL, tatl_chat_listener, socket); 
 }
 
-void tatl_join_chat_listener () {
-  pthread_join(TATL_LISTENER_THREAD, NULL);  
+void tatl_join_chat_listener (pthread_t* thread) {
+  pthread_join(*thread, NULL);
 }
 
 
-void tatl_recursive_connect ();
+int tatl_recursive_connect ();
 void* tatl_client_server (void* arg);
+
 // Request entering a room
 int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (tatl_sanity_check(CLIENT, NOT_IN_ROOM)) {
@@ -520,30 +524,21 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
   msg.type = JOIN_ROOM;
   strcpy(msg.roomname, roomname);
   strcpy(msg.username, username);
-  tatl_send_protocol(TATL_SOCK, &msg);
+  tatl_send_protocol(TATL_SERVER_SOCK, &msg);
 
   // RECEIVE RESPONSE FROM SERVER
-  tatl_receive_protocol(TATL_SOCK, &msg);
+  tatl_receive_protocol(TATL_SERVER_SOCK, &msg);
 
   // IF WE ARE NOT ALLOWED TO JOIN, EXIT
   if (msg.type == FAILURE) {
     return -1;
   }
   
-
   // TODO : prompt the user for the password
   hash_pass("b41100ns", CURRENT_PASS_HASH);
 
   // IF WE ARE ALLOWED TO JOIN THE ROOM
   if (msg.type == SUCCESS) {    
-    CURRENT_CLIENT_STATUS = IN_ROOM;
-    strcpy(CURRENT_ROOM, roomname);
-    strcpy(CURRENT_USERNAME, username);
-    strcpy(members, msg.message);
-    
-    printf("Spawning heartbeat sender.\n");
-    tatl_spawn_heartbeat_sender();
-
     int alone = 1;
     int success = 0;
     // If someone is already in the room, connect
@@ -571,10 +566,17 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
       }
     }
 
+    int entered_room = 0;
     if (!alone && success) {
       // Find our previous
       printf("Initiating a recursive connection!\n");
-      tatl_recursive_connect();
+      int failure = tatl_recursive_connect();
+      if (!failure) {
+	entered_room = 1;
+      } else {
+	tatl_set_error("Authentication failure.");
+	return -1;
+      }
 
     } else if (alone) {
       aesKeyGen(CURRENT_AES_KEY);
@@ -588,13 +590,20 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
 #endif 
       
     } else if (!alone && !success) {
-      printf("Could not connect to anyone.");
+      tatl_set_error("Could not connect to anyone in the room.\n");
+      return -1;
     }
 
     // Listen for our next
     // TODO : join the thread
-    pthread_create(&TATL_CLIENT_SERVER_THREAD, NULL, tatl_client_server, NULL);
-    
+    if (entered_room) {
+      CURRENT_CLIENT_STATUS = IN_ROOM;
+      strcpy(CURRENT_ROOM, roomname);
+      strcpy(CURRENT_USERNAME, username);
+      strcpy(members, msg.message);
+      pthread_create(&TATL_CLIENT_SERVER_THREAD, NULL, tatl_client_server, NULL);
+    }    
+
     return 0;
   } else {
     return -1;
@@ -602,14 +611,14 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
 }
 
 void* tatl_client_server (void* arg) {
-  if (ezlisten(&TATL_LISTENER_SOCK, TATL_SERVER_PORT)) {
+  if (ezlisten(&TATL_CLIENT_SERVER_SOCK, TATL_SERVER_PORT)) {
     perror("Could not set up client server");
     pthread_exit(NULL);
   }
   
   while (1) {
     printf("Client server. Waiting for the worms.\n");
-    TATL_NEXT_SOCK = ezaccept(TATL_LISTENER_SOCK);
+    TATL_NEXT_SOCK = ezaccept(TATL_CLIENT_SERVER_SOCK);
     if (TATL_NEXT_SOCK < 0) {
       printf("Error accepting a client.\n");
       continue;
@@ -619,14 +628,14 @@ void* tatl_client_server (void* arg) {
     printf("Dat peerdata tho\n");
     
     if (tatl_diffie_hellman(TATL_NEXT_SOCK, NULL)) {
-      tatl_spawn_chat_listener(&TATL_NEXT_SOCK);
+      tatl_spawn_chat_listener(&TATL_NEXT_SOCK, &TATL_NEXT_LISTENER_THREAD);
       
       // Deny everyone else
       tmsg msg;
       msg.type = FAILURE;
       strcpy(msg.message, TATL_NEXT_IP);
       while (1) {
-	int reject = ezaccept(TATL_LISTENER_SOCK);
+	int reject = ezaccept(TATL_CLIENT_SERVER_SOCK);
 	tatl_send_protocol(reject, &msg);
 	ezclose(reject);
       }
@@ -634,7 +643,7 @@ void* tatl_client_server (void* arg) {
   }
 }
 
-void tatl_recursive_connect () {
+int tatl_recursive_connect () {
   printf("Recursive connect. Receiving on socket %d\n", TATL_PREV_SOCK);
   char peer [20];
   int peersock;
@@ -644,23 +653,23 @@ void tatl_recursive_connect () {
   tmsg msg;
   tatl_receive_protocol(TATL_PREV_SOCK, &msg);
   
-  int success = 0;
   if (msg.type == AUTHENTICATION) {
     printf("Authenticating...\n");
     if (tatl_diffie_hellman(TATL_PREV_SOCK, &msg)) {
       printf("Success!\n");
-      success = 1;
-      tatl_spawn_chat_listener(&TATL_PREV_SOCK);
+      tatl_spawn_chat_listener(&TATL_PREV_SOCK, &TATL_PREV_LISTENER_THREAD);
+      return 0;
+    } else {
+      printf("Failed to authenticate.\n");
+      return -1;
     }
   } 
 
-  if (!success) {
-    printf("No dice. Attempting next ip: %s\n", msg.message);
-    close(TATL_PREV_SOCK);
-    TATL_PREV_SOCK = 0;
-    ezconnect(&TATL_PREV_SOCK, msg.message, TATL_SERVER_PORT);
-    tatl_recursive_connect();
-  }
+  printf("No dice. Attempting next ip: %s\n", msg.message);
+  close(TATL_PREV_SOCK);
+  TATL_PREV_SOCK = 0;
+  ezconnect(&TATL_PREV_SOCK, msg.message, TATL_SERVER_PORT);
+  return tatl_recursive_connect();
 }
 
 // Send a chat to the current chatroom
@@ -702,12 +711,20 @@ int tatl_leave_room () {
 
   tmsg msg;
   msg.type = LEAVE_ROOM;
-  tatl_send_protocol(TATL_SOCK, &msg);
+  tatl_send_protocol(TATL_SERVER_SOCK, &msg);
 
   CURRENT_CLIENT_STATUS = NOT_IN_ROOM;
   CURRENT_ROOM[0] = 0;
 
-  tatl_join_chat_listener();
+  if (TATL_PREV_SOCK) {
+    ezclose(TATL_PREV_SOCK);
+    tatl_join_chat_listener(&TATL_PREV_LISTENER_THREAD);
+  }
+
+  if (TATL_NEXT_SOCK) {
+    ezclose(TATL_NEXT_SOCK);
+    tatl_join_chat_listener(&TATL_NEXT_LISTENER_THREAD);
+  }
   return 0;
 }
 
@@ -717,9 +734,9 @@ int tatl_request_rooms (char* rooms) {
   
   tmsg msg;
   msg.type = LIST;
-  tatl_send_protocol(TATL_SOCK, &msg);
+  tatl_send_protocol(TATL_SERVER_SOCK, &msg);
 
-  tatl_receive_protocol(TATL_SOCK, &msg);
+  tatl_receive_protocol(TATL_SERVER_SOCK, &msg);
   strcpy(rooms, msg.message);
   return msg.amount_rooms;
 }

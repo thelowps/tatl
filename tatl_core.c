@@ -84,7 +84,7 @@ int tatl_receive_protocol (int socket, tmsg* msg) {
     msg->type = CHAT;
     strcpy(msg->roomname, strtok(raw_msg, ":"));
     strcpy(msg->username, strtok(NULL, ":"));
-    sscanf(strtok(NULL, ":"), "%d", &(msg->message_id));
+    sscanf(strtok(NULL, ":"), "%lu", &(msg->message_id));
     char* buf = strtok(NULL, ":");
     sscanf(buf, "%d", &(msg->message_size));
     if (msg->message_size) {
@@ -132,7 +132,7 @@ void tatl_send_protocol (int socket, tmsg* msg) {
   } else if (msg->type == GROUPS) {
     sprintf(raw_msg, "G%d %s", msg->amount_rooms, msg->message);
   } else if (msg->type == CHAT) {
-    sprintf(raw_msg, "T%s:%s:%u:%u:", msg->roomname, msg->username, msg->message_id, msg->message_size);
+    sprintf(raw_msg, "T%s:%s:%lu:%u:", msg->roomname, msg->username, msg->message_id, msg->message_size);
     msg_size = strlen(raw_msg) + msg->message_size;
     char* temp = raw_msg + strlen(raw_msg);
     memcpy(temp, msg->message, msg->message_size);

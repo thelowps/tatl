@@ -44,7 +44,7 @@ typedef struct {
   MESSAGE_TYPE type;
   char username [TATL_MAX_USERNAME_SIZE+1];
   char roomname [TATL_MAX_ROOMNAME_SIZE+1];
-  unsigned int message_id;
+  unsigned long message_id;
   char message [TATL_MAX_CHAT_SIZE+1];
   int message_size;
   

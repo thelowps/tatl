@@ -34,95 +34,95 @@ void charncpy(char *cpyTo, char *cpyFrom, int x){
 }
 
 void aesEnc(unsigned char *aesKey, const char *ptext, long *blocks, char *ctext){
-	gcry_cipher_hd_t	cipherHandle;
-	gcry_error_t		gcryError;
+  gcry_cipher_hd_t	cipherHandle;
+  gcry_error_t		gcryError;
 	
-	int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
-	int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
-	int ptextLength = strlen(ptext) + 1; //gets the number of characters including null terminator in the plaintext
-	int paddedLength;
-	if( (ptextLength % blkLength) == 0){
-		paddedLength = ptextLength;
-	}
-	else{
-		paddedLength = ptextLength - (ptextLength % blkLength) + blkLength;
-	}
+  int keyLength = gcry_cipher_get_algo_keylen(GCRY_CIPHER);
+  int blkLength = gcry_cipher_get_algo_blklen(GCRY_CIPHER);
+  int ptextLength = strlen(ptext) + 1; //gets the number of characters including null terminator in the plaintext
+  int paddedLength;
+  if( (ptextLength % blkLength) == 0){
+    paddedLength = ptextLength;
+  }
+  else{
+    paddedLength = ptextLength - (ptextLength % blkLength) + blkLength;
+  }
 	
-	char *padded_ptext = malloc(paddedLength);
-	memset(padded_ptext, 0, paddedLength);    //initialize to null terminators
-	memset(ctext, 0, paddedLength + blkLength);  //initialize ctext to null terminators
+  char *padded_ptext = malloc(paddedLength);
+  memset(padded_ptext, 0, paddedLength);    //initialize to null terminators
+  memset(ctext, 0, paddedLength + blkLength);  //initialize ctext to null terminators
 	
-	memcpy(padded_ptext, ptext, strlen(ptext)); //copy the ptext into the padded ptext, the rest of the padding is null terminators
+  memcpy(padded_ptext, ptext, strlen(ptext)); //copy the ptext into the padded ptext, the rest of the padding is null terminators
 	
-	char	* plainTextBlock = malloc(blkLength);  // allocate space for the block of the plaintext being encrypted
-	char	* encBufferBlock = malloc(blkLength);  // allocate space for the new block of ciphertext
-	char * encCtrBlock = malloc(blkLength);     // allocate space for the encrypted ctr string
+  char	* plainTextBlock = malloc(blkLength);  // allocate space for the block of the plaintext being encrypted
+  char	* encBufferBlock = malloc(blkLength);  // allocate space for the new block of ciphertext
+  char * encCtrBlock = malloc(blkLength);     // allocate space for the encrypted ctr string
 
-	long 	iC;		// a counter for the for loops, long for allowing a very large number of blocks to be processed in "manual" ctr mode using AES
+  long 	iC;		// a counter for the for loops, long for allowing a very large number of blocks to be processed in "manual" ctr mode using AES
 	
-	long 	numBlocks = paddedLength / blkLength;		// the number of blocks for the padded plaintext, important for the for loop	
-	*blocks = numBlocks; //let createMessage know how many blocks were encrypted
-	char *ctr = malloc(blkLength); //random string 16 bytes for the ctr
-	gcry_randomize(ctr, blkLength, GCRY_STRONG_RANDOM); 
+  long 	numBlocks = paddedLength / blkLength;		// the number of blocks for the padded plaintext, important for the for loop	
+  *blocks = numBlocks; //let createMessage know how many blocks were encrypted
+  char *ctr = malloc(blkLength); //random string 16 bytes for the ctr
+  gcry_randomize(ctr, blkLength, GCRY_STRONG_RANDOM); 
 
-	memcpy(ctext, ctr, blkLength);  // set the first block of encBuffer to ctr
+  memcpy(ctext, ctr, blkLength);  // set the first block of encBuffer to ctr
 	
-	gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);  //mode/type is irrelevant because this is encrypting an individual block
-	if (gcryError){
-		printf("Failure in gcry_cipher_open.\n");
-		return;
-	}
+  gcryError = gcry_cipher_open(&cipherHandle, GCRY_CIPHER, GCRY_MODE, 0);  //mode/type is irrelevant because this is encrypting an individual block
+  if (gcryError){
+    printf("Failure in gcry_cipher_open.\n");
+    return;
+  }
 
-	gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);  //this matters, it needs the key
-	if (gcryError){
-		printf("Failure in gcry_cipher_setkey.\n");
-		return;
-	}
+  gcryError = gcry_cipher_setkey(cipherHandle, aesKey, keyLength);  //this matters, it needs the key
+  if (gcryError){
+    printf("Failure in gcry_cipher_setkey.\n");
+    return;
+  }
 
-	gcryError = gcry_cipher_setiv(cipherHandle, ctr, blkLength); //this doesn't, i'm implementing ctr mode on my own
-	if(gcryError){
-		printf("Failure in gcry_cipher_setiv.\n");
-		return;
-	}
+  gcryError = gcry_cipher_setiv(cipherHandle, ctr, blkLength); //this doesn't, i'm implementing ctr mode on my own
+  if(gcryError){
+    printf("Failure in gcry_cipher_setiv.\n");
+    return;
+  }
 	
-	int jC, ctrIndex;
-	for(iC = 1; iC <= numBlocks; iC++) {  //creates a single block (iC is the block number for that iteration) of the plaintext
-		gcryError = gcry_cipher_encrypt(cipherHandle, encCtrBlock, blkLength, ctr, blkLength);
-		if(gcryError){
-			printf("Failure in gcry_cipher_encrpyt.\n");
-			return;
-		}
+  int jC, ctrIndex;
+  for(iC = 1; iC <= numBlocks; iC++) {  //creates a single block (iC is the block number for that iteration) of the plaintext
+    gcryError = gcry_cipher_encrypt(cipherHandle, encCtrBlock, blkLength, ctr, blkLength);
+    if(gcryError){
+      printf("Failure in gcry_cipher_encrpyt.\n");
+      return;
+    }
 
-		for(jC = 0; jC < blkLength; jC++) {//0 to 15 for AES128
-			//this character of this block of plaintext is the jCth character of plainTextBlock
-			plainTextBlock[jC] = padded_ptext[blkLength * (iC - 1) + jC];  
-			//XOR the jCth character of the plainTextBlock with the jCth character of the encCtrBlock
-			encBufferBlock[jC] = (encCtrBlock[jC] ^ plainTextBlock[jC]);			
-			ctext[ (blkLength * iC) + jC ] = encBufferBlock[jC];  //put that result in the appropriate spot in the ciphertext
-		}
+    for(jC = 0; jC < blkLength; jC++) {//0 to 15 for AES128
+      //this character of this block of plaintext is the jCth character of plainTextBlock
+      plainTextBlock[jC] = padded_ptext[blkLength * (iC - 1) + jC];  
+      //XOR the jCth character of the plainTextBlock with the jCth character of the encCtrBlock
+      encBufferBlock[jC] = (encCtrBlock[jC] ^ plainTextBlock[jC]);			
+      ctext[ (blkLength * iC) + jC ] = encBufferBlock[jC];  //put that result in the appropriate spot in the ciphertext
+    }
 		
-		// increment ctr for the next iteration
-		for(ctrIndex = 15; ctrIndex >= 0; ctrIndex--){
-			if (ctr[ctrIndex] == 127)   // if the char examined (starting with the last char in ctr) is at 127, set it to zero and continue on to increment the next char (essentially carrying)
-			  {	
-			    //gcry_cipher_hd_t  cipherHandle;
-			    //gcry_error_t gcryError;
-			    ctr[ctrIndex] = 0;
+    // increment ctr for the next iteration
+    for(ctrIndex = 15; ctrIndex >= 0; ctrIndex--){
+      if (ctr[ctrIndex] == 127)   // if the char examined (starting with the last char in ctr) is at 127, set it to zero and continue on to increment the next char (essentially carrying)
+	{	
+	  //gcry_cipher_hd_t  cipherHandle;
+	  //gcry_error_t gcryError;
+	  ctr[ctrIndex] = 0;
 				
-			}
-			else	// otherwise, increment this character and move on
-			{
-				ctr[ctrIndex] += 1;
-				ctrIndex = -1; // exit the loop
-			}
-		}
 	}
-	free(plainTextBlock);
-	free(encBufferBlock);
-	free(encCtrBlock);
-	free(ctr);
-	free(padded_ptext);
-	gcry_cipher_close(cipherHandle);
+      else	// otherwise, increment this character and move on
+	{
+	  ctr[ctrIndex] += 1;
+	  ctrIndex = -1; // exit the loop
+	}
+    }
+  }
+  free(plainTextBlock);
+  free(encBufferBlock);
+  free(encCtrBlock);
+  free(ctr);
+  free(padded_ptext);
+  gcry_cipher_close(cipherHandle);
 }
 	
 	
@@ -202,35 +202,35 @@ void aesDec(unsigned char *aesKey, char *ctext, long numBlocks, char *ptext){ //
 
 //Hashing function
 void computeMAC(char *input, char *macKey, long numBlocks, char *MAC){
-	gcry_md_hd_t		hashHandle;
-	gcry_error_t		gcryError;
-	int keyLength = 32;  //that's what it is for SHA256 (if you change this, also change in keyGen)
-	gcryError = gcry_md_open(&hashHandle, GCRY_MD, GCRY_MD_FLAG_HMAC);  //last argument makes it do HMAC
-	if (gcryError){
-		printf("Failure in gcry_cipher_open.\n");
-		return;
-	}
+  gcry_md_hd_t		hashHandle;
+  gcry_error_t		gcryError;
+  int keyLength = 32;  //that's what it is for SHA256 (if you change this, also change in keyGen)
+  gcryError = gcry_md_open(&hashHandle, GCRY_MD, GCRY_MD_FLAG_HMAC);  //last argument makes it do HMAC
+  if (gcryError){
+    printf("Failure in gcry_cipher_open.\n");
+    return;
+  }
 
-	gcryError = gcry_md_setkey(hashHandle, macKey, keyLength);  //set the key for the hash function here
-	if (gcryError){
-		printf("Failure in gcry_md_setkey.\n");
-		return;
-	}
+  gcryError = gcry_md_setkey(hashHandle, macKey, keyLength);  //set the key for the hash function here
+  if (gcryError){
+    printf("Failure in gcry_md_setkey.\n");
+    return;
+  }
 	
-	char *tempDig;
-	gcry_md_write(hashHandle, input, (numBlocks * 16));
-	tempDig = (char*)gcry_md_read(hashHandle, GCRY_MD);
-	charncpy((char*)MAC, (char*)tempDig, 32);
-	gcry_md_close(hashHandle); //close the context	
+  char *tempDig;
+  gcry_md_write(hashHandle, input, (numBlocks * 16));
+  tempDig = (char*)gcry_md_read(hashHandle, GCRY_MD);
+  charncpy((char*)MAC, (char*)tempDig, 32);
+  gcry_md_close(hashHandle); //close the context	
 
-	/*
-	printf("MAC: ");
-	int i;
-	for(i = 0; i < 32; ++i) {
-	  printf("%02x ", (unsigned char)MAC[i]);
-	}
-	printf("\n");
-	*/
+  /*
+    printf("MAC: ");
+    int i;
+    for(i = 0; i < 32; ++i) {
+    printf("%02x ", (unsigned char)MAC[i]);
+    }
+    printf("\n");
+  */
 }//end computeMAC	
 
 

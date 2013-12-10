@@ -76,9 +76,8 @@ int main (int argc, char** argv) {
     while(line[0] == '\n'){ //to handle user hitting enter and not typing a command ORIGINAL LOOP
       printf("TATLChat> ");
       if(fgets(line, sizeof(line), stdin) == NULL) { //EOF 
-	//printf("Exiting.\n");
-	// TODO : what is this?
-	printf("\r");
+	perror("fgets returned NULL");
+	//printf("\r");
 	exit(0);
       }
     } 
@@ -138,7 +137,7 @@ int main (int argc, char** argv) {
 	      printf("...leaving room\n");
 	      tatl_leave_room (); 
 	      printf("Left room\n");
-	      break;
+	      exit(0);
 	    }
 
 	    tatl_chat(input);

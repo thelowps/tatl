@@ -57,7 +57,7 @@ int ezconnect (int* sock, const char* ip, int port) {
 
 int ezsend (int sock, const void* data, int len) {
   struct sockaddr_in servaddr;
-  int s;
+  int s = 0;
   if ((s = sendto(sock, data, len, 0, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when sending data");
   }

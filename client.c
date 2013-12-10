@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+
+//#define DEBUG
 
 void handle_chat (tchat chat) {
   printf("%s> %s\n%s>", chat.sender, chat.message, chat.roomname);
@@ -43,7 +46,6 @@ int main (int argc, char** argv) {
     exit(1);
   }
 
-
   //get command line arguments
   char* host_and_port; 
   host_and_port = argv[1];
@@ -65,8 +67,7 @@ int main (int argc, char** argv) {
   printf("-- type 'list' to get a list of existing chatrooms   --\n");
   printf("-- to join, type 'join' [roomname] [username]   --\n");
   printf("-- once in a chatroom, type 'leave' to leave   --\n");
-  printf("-- type 'quit' to exit this chat client  --\n\n");
-  
+  printf("-- type 'quit' to exit this chat client  --\n\n");  
 
   for(;;) {
     line[0] = '\n';
@@ -76,7 +77,9 @@ int main (int argc, char** argv) {
     while(line[0] == '\n'){ //to handle user hitting enter and not typing a command ORIGINAL LOOP
       printf("TATLChat> ");
       if(fgets(line, sizeof(line), stdin) == NULL) { //EOF 
-	perror("fgets returned NULL");
+	#ifdef DEBUG
+		perror("DEBUG: fgets returned NULL");
+	#endif
 	//printf("\r");
 	exit(0);
       }
@@ -97,7 +100,6 @@ int main (int argc, char** argv) {
     }
 
     if (strcmp(command, list) == 0) { //when you type list repeatedly it multiplies the room names
-
       memset(rooms, 0, sizeof(rooms));
       tatl_request_rooms(room_data);
       char* tok = strtok(room_data, ":");
@@ -116,15 +118,14 @@ int main (int argc, char** argv) {
     if(strcmp(command, join) == 0) {
       if(nwords != 3) {
 	printf("Please specify a chatroom name and username\n");
-		
-      }
-      else {
-
+      } else {
+	char* password = getpass("Enter the password for this room.");
+	
 	// TODO: not allow inputs with spaces
 	strcpy(roomname, words[0]);
 	strcpy(username, words[1]);
-
-	if (tatl_join_room(roomname, username, members) < 0) {
+	
+	if (tatl_join_room(roomname, username, password, members) < 0) {
 	  tatl_print_error("-- Could not enter room");
 	} else {
 	  printf("-- You have succesfully entered the room.\n");
@@ -136,7 +137,9 @@ int main (int argc, char** argv) {
 	    if(strcmp(input, leave) == 0) { //need to supress chat_listener dying error 
 	      printf("...leaving room\n");
 	      tatl_leave_room (); 
-	      printf("Left room\n");
+		#ifdef DEBUG
+	      		printf("DEBUG: Left room\n");
+		#endif
 	      exit(0);
 	    }
 

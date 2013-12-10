@@ -14,7 +14,7 @@
 #include "sassyhash.h"
 #include "linked.h"
 
-#define DEBUG
+//#define DEBUG
 
 extern TATL_MODE CURRENT_MODE;
 extern int TATL_USE_AUTHENTICATION;
@@ -34,7 +34,6 @@ typedef struct {
   char name [TATL_MAX_ROOMNAME_SIZE];
   struct node* users_head;
   shash_t HEARTBEAT_MAP; 
-  //struct node* heartbeats_head; // TODO : put this in 
 } roomdata;
 
 shash_t USER_MAP = NULL;
@@ -99,7 +98,7 @@ int tatl_run_server () {
     if ((conn = ezaccept(TATL_SOCK)) < 0) {
       tatl_set_error("Error accepting new client.");
 #ifdef DEBUG
-      printf("Error accepting new client!\n");
+      printf("DEBUG: Error accepting new client!\n");
 #endif
       return -1;
     }
@@ -140,7 +139,9 @@ void* tatl_handle_new_connection (void* arg) {
   tmsg msg;
   msg.type = ID;
   msg.message_id = socket;
+ 
   printf("New user's IP address: %s", user->ip_address);
+ 
   strcpy(msg.message, user->ip_address);
   tatl_send_protocol(socket, &msg);
 

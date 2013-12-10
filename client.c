@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+//#define DEBUG
+
 void handle_chat (tchat chat) {
   printf("%s> %s\n%s>", chat.sender, chat.message, chat.roomname);
   //printf("%s> ", chat.roomname);
@@ -76,7 +78,9 @@ int main (int argc, char** argv) {
     while(line[0] == '\n'){ //to handle user hitting enter and not typing a command ORIGINAL LOOP
       printf("TATLChat> ");
       if(fgets(line, sizeof(line), stdin) == NULL) { //EOF 
-	perror("fgets returned NULL");
+	#ifdef DEBUG
+		perror("DEBUG: fgets returned NULL");
+	#endif
 	//printf("\r");
 	exit(0);
       }
@@ -136,7 +140,9 @@ int main (int argc, char** argv) {
 	    if(strcmp(input, leave) == 0) { //need to supress chat_listener dying error 
 	      printf("...leaving room\n");
 	      tatl_leave_room (); 
-	      printf("Left room\n");
+		#ifdef DEBUG
+	      		printf("DEBUG: Left room\n");
+		#endif
 	      exit(0);
 	    }
 

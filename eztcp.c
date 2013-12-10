@@ -22,6 +22,8 @@
 
 #include "eztcp.h"
 
+//#define DEBUG
+
 // A switch to control whether or not the library prints out
 // errors or just returns error values.
 int EZ_PRINT_ERROR = 1; // OH GOD A GLOBAL VARIABLE RUN
@@ -69,7 +71,8 @@ int ezreceive (int sock, void* data, int len) {
   socklen_t socklen = (sizeof(struct sockaddr_in));
   while (bytes_received < len) {
     if ((n = recvfrom(sock, data+bytes_received, len-bytes_received, 0, NULL, &socklen)) <= 0) {
-      if (EZ_PRINT_ERROR) perror("Error when receiving data");
+      if (EZ_PRINT_ERROR && n<0) perror("Error when receiving data");
+      if(EZ_PRINT_ERROR && n==0) perror("Closing socket");
       return n;
     } else {
       bytes_received += n;
@@ -114,7 +117,9 @@ int ezaccept (int sock) {
   struct sockaddr_in cliaddr;
   socklen_t clilen = sizeof(cliaddr);
   int conn;
-  printf("Attempting accept on socket: %d\n", sock);
+#ifdef DEBUG
+  printf("DEBUG: Attempting accept on socket: %d\n", sock);
+#endif
   if ((conn = accept(sock, (struct sockaddr *)&cliaddr, &clilen)) < 0) {
     if (EZ_PRINT_ERROR) perror("Error when accepting new client");
   }

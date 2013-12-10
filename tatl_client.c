@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <gmp.h>
 
-//#define DEBUG
+#define DEBUG
 #define SEC_DEBUG
 
 // SOCKETS //
@@ -80,7 +80,9 @@ void* tatl_send_heartbeat (void* arg) {
   while(1) {
     usleep(550000000);
     if (CURRENT_CLIENT_STATUS == IN_ROOM) {
-      printf("Sending heartbeat.\n");
+#ifdef DEBUG
+      printf("DEBUG: Sending heartbeat.\n");
+#endif
       strcpy(msg.roomname, CURRENT_ROOM);
       strcpy(msg.username, CURRENT_USERNAME);
       tatl_send_protocol(TATL_SERVER_SOCK, &msg); 
@@ -115,6 +117,10 @@ int tatl_init_client (const char* server_ip, const char* server_port, int flags)
   mpz_set_ui(TATL_DEFAULT_MULT_GROUP.gen, 103);
   mpz_set_str(TATL_DEFAULT_MULT_GROUP.p, "179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624225795083", 10);
 
+#ifdef SEC_DEBUG
+  printf("SEC_DEBUG: Our prime is: \nSEC_DEBUG: 179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624225795083\n");
+  printf("SEC_DEBUG: Our generator is: \nSEC_DEBUG: 103\n\n");
+#endif
 
   // Receive ID
   tmsg msg;
@@ -150,7 +156,7 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
   mpz_add_ui(expected, check, 1);
 
 #ifdef SEC_DEBUG
-  printf("VERIFYING OTHER PARTY: Random number to send:\n");
+  printf("SEC_DEBUG: Verifying other party. Generated random number to send:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
 #endif  
@@ -159,7 +165,7 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
   mpz_mul(check, check, gabh);
   mpz_mod(check, check, TATL_DEFAULT_MULT_GROUP.p);
 #ifdef SEC_DEBUG
-  printf("VERIFYING OTHER PARTY: Encrypted random number:\n");
+  printf("SEC_DEBUG: Verifying other party. Sending encrypted random number:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
 #endif
@@ -175,8 +181,8 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
   tatl_receive_protocol(socket, &msg);
   mpz_set_str(resp, msg.message, 10);
 #ifdef SEC_DEBUG
-  printf("VERIFYING OTHER PARTY: Received encrypted number: \n%s\n\n", msg.message);
-  printf("Expecting number: ");
+  printf("SEC_DEBUG: Verifying other party. Received encrypted response: \nSEC_DEBUG: %s\n\n", msg.message);
+  printf("SEC_DEBUG: Verifying other party. Expecting number: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, expected);
   printf("\n\n");
 #endif
@@ -186,24 +192,23 @@ int tatl_diffie_hellman_verify_party (int socket, mpz_t gabh, mpz_t inverse, gmp
   mpz_mod(resp, resp, TATL_DEFAULT_MULT_GROUP.p);
 
 #ifdef SEC_DEBUG
-  printf("VERIFYING OTHER PARTY: Decrypted response: \n");
+  printf("SEC_DEBUG: Verifying other party. Decrypted response: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, resp);
   printf("\n\n");
 #endif
 
   if (!mpz_cmp(expected, resp)) {
+#ifdef SEC_DEBUG
+    printf("SEC_DEBUG: Verifying other party. Verification successful.\n\n");
+#endif
     verified = 1;
   } else {
 #ifdef SEC_DEBUG
-    printf("VERIFYING OTHER PARTY: The number expected was incorrect.\n\n");
+    printf("SEC_DEBUG: Verifying other party. The number expected was incorrect.\n\n");
 #endif
     verified = 0;
   }
   
-#ifdef SEC_DEBUG
-  printf("VERIFYING OTHER PARTY: Verification finished.\n\n");
-#endif
-
   mpz_clear(expected);
   mpz_clear(check);
   mpz_clear(resp);
@@ -223,13 +228,13 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
   tatl_receive_protocol(socket, &msg);
   mpz_set_str(check, msg.message, 10);
 #ifdef SEC_DEBUG
-  printf("IN SELF VERIFICATION: Received encrypted number:\n%s\n\n", msg.message);
+  printf("SEC_DEBUG: In self verification. Received encrypted number:\nSEC_DEBUG: %s\n\n", msg.message);
 #endif
 
   mpz_mul(check, check, inverse);
   mpz_mod(check, check, TATL_DEFAULT_MULT_GROUP.p);
 #ifdef SEC_DEBUG
-  printf("IN SELF VERIFICATION: Decrypted number:\n");
+  printf("SEC_DEBUG: In self verification. Decrypted number:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, check);
   printf("\n\n");
 #endif
@@ -237,7 +242,7 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
   // Encrypt and return the response * g^abh
   mpz_add_ui(resp, check, 1);    
 #ifdef SEC_DEBUG
-  printf("IN SELF VERICATION: Added 1 to the number received:\n");
+  printf("SEC_DEBUG: In self verification. Added 1 to the number received:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, resp);
   printf("\n\n");
 #endif
@@ -246,7 +251,7 @@ void tatl_diffie_hellman_verify_self (int socket, mpz_t gabh, mpz_t inverse) {
 
   char* resp_str = mpz_get_str(NULL, 10, resp);
 #ifdef SEC_DEBUG
-  printf("IN SELF VERIFICATION: Sending response:\n%s\n\n", resp_str);
+  printf("SEC_DEBUG: In self verification. Sending encrypted response:\nSEC_DEBUG: %s\n\n", resp_str);
 #endif
   strcpy(msg.message, resp_str);
   msg.message_size = strlen(resp_str)+1;
@@ -304,22 +309,21 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 
   // Read in our password hash as a number and calculate g^(a*b*hash)
   mpz_import(pass_hash, 32, 1, sizeof(unsigned char), 1, 0, CURRENT_PASS_HASH);  
-  //mpz_powm(gabh, gab, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
-  mpz_set(gabh, gab);
+  mpz_powm(gabh, gab, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
 
 #ifdef SEC_DEBUG
-  printf("Random number for seeding is: %ld\n\n", seed);
-  printf("We took our g^b:\n");
+  printf("SEC_DEBUG: Random number for seeding is: %ld\n\n", seed);
+  printf("SEC_DEBUG: We took our g^b:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, gb);
-  printf("\n\nand raised it to a:\n");
+  printf("\n\nSEC_DEBUG: and raised it to a:\nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, a);
-  printf("\n\nand we got g^ab = ");
+  printf("\n\nSEC_DEBUG: and we got g^ab: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, gab);
-  printf("\n\nand we raised that to our password hash: ");
+  printf("\n\nSEC_DEBUG: and we raised that to our password hash: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, pass_hash);
-  printf("\n\nwhich, in hex, is: ");
+  printf("\n\nSEC_DEBUG: which, in hex, is: \nSEC_DEBUG: ");
   tatl_print_hex(CURRENT_PASS_HASH, 32);
-  printf("\n\nand got our g^abh = ");
+  printf("\n\nSEC_DEBUG: and got our g^abh: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, gabh);
   printf("\n\n");
 #endif
@@ -333,20 +337,20 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
   mpz_init(inverse);
 
   // calculate gbh
-  //mpz_powm(gbh, gb, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
-  mpz_set(gbh, gb);
+  mpz_powm(gbh, gb, pass_hash, TATL_DEFAULT_MULT_GROUP.p);
 
   // Calculate inverse of gabh
   mpz_sub_ui(exponent, TATL_DEFAULT_MULT_GROUP.p, 1);
   mpz_sub(exponent, exponent, a);
   mpz_powm(inverse, gbh, exponent, TATL_DEFAULT_MULT_GROUP.p);
 
-  int success = 0;
 #ifdef SEC_DEBUG
-  printf("Inverse in decimal before verification: ");
+  printf("SEC_DEBUG: Inverse of g^abh: \nSEC_DEBUG: ");
   mpz_out_str(stdout, 10, inverse);
-  printf("\n");
+  printf("\n\n");
 #endif
+
+  int success = 0;
   if (!initial) {
     success = tatl_diffie_hellman_verify_party(socket, gabh, inverse, state);
     tatl_diffie_hellman_verify_self(socket, gabh, inverse);
@@ -354,20 +358,13 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
     tatl_diffie_hellman_verify_self(socket, gabh, inverse);
     success = tatl_diffie_hellman_verify_party(socket, gabh, inverse, state);
   }
-#ifdef SEC_DEBUG
-  printf("Inverse in decimal after verification: ");
-  mpz_out_str(stdout, 10, inverse);
-  printf("\n");
-#endif
 
   // Free the state
   gmp_randclear(state);
 
-  printf("Verification finished. Success = %d, Prev sock = %d\n", success, TATL_PREV_SOCK);
-
   if (success) {
 #ifdef SEC_DEBUG
-    printf("Handshake successful!\n");
+    printf("SEC_DEBUG: Handshake successful!\n");
 #endif
     mpz_t enc_key, enc_mac_key;
     mpz_init(enc_key);
@@ -375,25 +372,15 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 
     if (!initial) {
 #ifdef SEC_DEBUG
-      printf("Sending key: ");
-      int i;
-      for (i = 0; i < 16; ++i) {
-	printf("%.2x", CURRENT_AES_KEY[i]);
-      }
-      printf("\nSending MAC key: ");
-      for (i = 0; i < 32; ++i) {
-	printf("%.2x", CURRENT_MAC_KEY[i]);
-      }
+      printf("SEC_DEBUG: Sending AES key: \nSEC_DEBUG: ");
+      tatl_print_hex(CURRENT_AES_KEY, 16);
+      printf("\n\nSEC_DEBUG: Sending MAC key: \nSEC_DEBUG: ");
+      tatl_print_hex(CURRENT_MAC_KEY, 32);
       printf("\n\n");
 #endif
 
       // encrypt the AES key
       mpz_import(enc_key, 16, 1, sizeof(char), 1, 0, CURRENT_AES_KEY);  
-#ifdef SEC_DEBUG
-      printf("Key sent as decimal: ");
-      mpz_out_str(stdout, 10, enc_key);
-      printf("\n");
-#endif
       mpz_mul(enc_key, enc_key, gabh);
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
 
@@ -409,80 +396,38 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
       sprintf(msg.message, "%s:%s", enc_key_str, enc_mac_key_str);
       msg.message_size = strlen(msg.message)+1;
       tatl_send_protocol(socket, &msg);
-#ifdef SEC_DEBUG
-      printf("Encrypted key sent as decimal: %s\n", enc_key_str);
-      printf("Encrypted MAC key sent as decimal: %s\n", enc_mac_key_str);
-      
-      printf("Decrypting the key, just for checks: ");
-      mpz_t dec;
-      mpz_init(dec);
-      mpz_mul(dec, enc_key, inverse);
-      mpz_mod(dec, dec, TATL_DEFAULT_MULT_GROUP.p);
-      mpz_out_str(stdout, 10, dec);
-      printf("\n\n");
-      printf("And the inverse used is: \n");
-      mpz_out_str(stdout, 10, inverse);
-      printf("\n\n");
-#endif
-      printf("Freeing. Sock = %d\n", TATL_PREV_SOCK);
       free(enc_key_str);
       free(enc_mac_key_str);
-      
-      printf("Key exchange complete.. Prev sock = %d\n", TATL_PREV_SOCK);
-      
+
     } else {
-      printf("Receving key. Socket = %d\n", TATL_PREV_SOCK);
+#ifdef DEBUG
+      printf("DEBUG: Receiving key. Socket = %d\n", TATL_PREV_SOCK);
+#endif
       tatl_receive_protocol(socket, &msg);
-      printf("Received key. Socket = %d\n", TATL_PREV_SOCK);
+#ifdef DEBUG
+      printf("DEBUG: Received key. Socket = %d\n", TATL_PREV_SOCK);
+#endif
       mpz_set_str(enc_key, strtok(msg.message, ":"), 10);
       mpz_set_str(enc_mac_key, strtok(NULL, ":"), 10);
-#ifdef SEC_DEBUG
-      printf("Received Encrypted key in decimal: \n");
-      mpz_out_str(stdout, 10, enc_key);
-      printf("\n\n");
 
-      printf("Received Encrypted MAC key in decimal: \n");
-      mpz_out_str(stdout, 10, enc_mac_key);
-      printf("\n\n");
-#endif
-      
       size_t produced = 0;
       // Decrypt the AES key
-      printf("Decrypting AES key. Sock = %d\n", TATL_PREV_SOCK);
-      printf("And the inverse used is: \n");
-      mpz_out_str(stdout, 10, inverse);
-      printf("\n\n");
       mpz_mul(enc_key, enc_key, inverse);
       mpz_mod(enc_key, enc_key, TATL_DEFAULT_MULT_GROUP.p);
-      printf("Exporting AES key. Sock = %d\n", TATL_PREV_SOCK);
       mpz_export(CURRENT_AES_KEY, &produced, 1, sizeof(char), 1, 0, enc_key);     
-      printf("Exported AES key. Produced = %zd, Sock = %d\n", produced, TATL_PREV_SOCK);
-      
-      printf("Decrypting MAC key. Sock = %d\n", TATL_PREV_SOCK);
+
       // Decrypt the MAC key
       mpz_mul(enc_mac_key, enc_mac_key, inverse);
       mpz_mod(enc_mac_key, enc_mac_key, TATL_DEFAULT_MULT_GROUP.p);
-      printf("Exporting MAC key. Sock = %d\n", TATL_PREV_SOCK);
       mpz_export(CURRENT_MAC_KEY, &produced, 1, sizeof(char), 1, 0, enc_mac_key);
-      printf("Exported MAC key. Produced: %zd, Sock = %d\n", produced, TATL_PREV_SOCK);
       
 #ifdef SEC_DEBUG
-      printf("Decrypted key in decimal: \n");
-      mpz_out_str(stdout, 10, enc_key);
+      printf("SEC_DEBUG: Decrypted AES key: \nSEC_DEBUG: ");
+      tatl_print_hex(CURRENT_AES_KEY, 16);
+      printf("\n\nSEC_DEBUG: Decrypted MAC key in hex: \nSEC_DEBUG: ");
+      tatl_print_hex(CURRENT_MAC_KEY, 32);
       printf("\n\n");
-      
-      printf("Decrypted key in hex: ");
-      int i;
-      for (i = 0; i < 16; ++i) {
-	printf("%.2x", CURRENT_AES_KEY[i]);
-      }
-      printf("\nDecrypted MAC key in hex: ");
-      for (i = 0; i < 32; ++i) {
-	printf("%.2x", CURRENT_MAC_KEY[i]);
-      }
 #endif
-      printf("Key exchange complete.. Prev sock = %d\n", TATL_PREV_SOCK);
-
     } 
 
     mpz_clear(enc_key);
@@ -499,12 +444,11 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
     mpz_clear(pass_hash);
     mpz_clear(gabh); 
 
-    printf("Exiting diffie hellman. Prev sock = %d\n", TATL_PREV_SOCK);
     return 1;
 
   } else {
 #ifdef SEC_DEBUG
-    printf("Handshake unsuccessful.\n\n");
+    printf("SEC_DEBUG: Handshake unsuccessful.\n\n");
 #endif
     mpz_clear(check);
     mpz_clear(resp);
@@ -518,8 +462,6 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
     mpz_clear(pass_hash);
     mpz_clear(gabh);
 
-    printf("Freed mpzs.\n");
-
     return 0;
   }
 
@@ -528,7 +470,9 @@ int tatl_diffie_hellman (int socket, tmsg* initial) {
 int tatl_recursive_connect (const char* roomname, const char* username);
 // Listens for chats on the given socket. Assumes the socket is already set up.
 void* tatl_chat_listener (void* arg) {
-  printf("Starting a chat listener.\n");
+#ifdef DEBUG
+  printf("DEBUG: Starting a chat listener.\n");
+#endif
   int* listener_socket = (int*)arg;
   int* forward_socket = NULL;
   forward_socket = *listener_socket == TATL_PREV_SOCK? &TATL_NEXT_SOCK : &TATL_PREV_SOCK;
@@ -538,18 +482,26 @@ void* tatl_chat_listener (void* arg) {
   int message_size;
   while (1) {  
     memset(&msg, 0, sizeof(msg));
-    printf("Waiting for a message on socket: %d", *listener_socket);
+#ifdef DEBUG
+    printf("DEBUG: Waiting for a message on socket: %d\n", *listener_socket);
+#endif
     message_size = tatl_receive_protocol(*listener_socket, &msg);
 
     // HANDLE CLOSED CONNECTIONS //
-    printf("Received a message...\n");
+#ifdef DEBUG 
+    printf("DEBUG: Received a message...\n");
+#endif
     if (message_size < 0 || msg.type == LEAVE_ROOM) {
-      printf("Closing a threaded connection.\n");
+#ifdef DEBUG
+      printf("DEBUG: Closing a threaded connection.\n");
+#endif
       
       // check if our main thread is attempting to leave the room.
       // If so, there is nothing more to be done here.
       if (CURRENT_CLIENT_STATUS == NOT_IN_ROOM) {
-	printf("Leaving room -- exiting listener thread.\n");
+#ifdef DEBUG
+	printf("DEBUG: Leaving room -- exiting listener thread.\n");
+#endif
 	pthread_exit(NULL);
       }
 
@@ -567,39 +519,47 @@ void* tatl_chat_listener (void* arg) {
 	} else {
 	  failure = is_new_head = ezconnect(&TATL_PREV_SOCK, CURRENT_HEAD_IP, TATL_SERVER_PORT);
 	}
-
+ 
 	if (!failure) {
 	  if (!tatl_recursive_connect(CURRENT_ROOM, CURRENT_USERNAME)) {
-	    printf("Connected to a new PREV\n");
+#ifdef DEBUG
+	    printf("DEBUG: Connected to a new PREV\n");
+#endif
 	  } else {
 	    is_new_head = 1;
 	  }
 	}
 	
 	if (is_new_head) {
-	  printf("We are the new head! Telling all my friends =)\n");
+#ifdef DEBUG
+	  printf("DEBUG: We are the new head! Telling all my friends =)\n");
+#endif
 	  if (TATL_NEXT_SOCK) {
 	    strcpy(CURRENT_HEAD_IP, SELF_IP);
 	    msg.type = HEAD;
 	    strcpy(msg.message, CURRENT_HEAD_IP);
 	    tatl_send_protocol(TATL_NEXT_SOCK, &msg);
 	  } else {
-	    printf("We are alone in this world.\n");
+#ifdef DEBUG
+	    printf("DEBUG: We are alone in this world.\n");
+#endif
 	  }
 	}
       }
-       
-      printf("Exiting listener thread.\n");
+      
+#ifdef DEBUG 
+      printf("DEBUG: Exiting listener thread.\n");
+#endif 
       pthread_exit(NULL);
 
       // HANDLE A CHAT //
     } else if (msg.type == CHAT && listener_function) {
       // We have received a chat
 #ifdef SEC_DEBUG
-      printf("\n\nReceived message from room: %s\nSender: %s\nSize: %d\nCiphertext: ",
+      printf("\n\nSEC_DEBUG: Received message from room: %s\nSEC_DEBUG: Sender: %s\nSEC_DEBUG: Size: %d\nSEC_DEBUG: Ciphertext: \nSEC_DEBUG: ",
 	     msg.roomname, msg.username, msg.message_size);
       tatl_print_hex(msg.message, msg.message_size);
-      printf("\n");
+      printf("\n\n");
 #endif
 
       char* plain_text = NULL;      
@@ -607,35 +567,42 @@ void* tatl_chat_listener (void* arg) {
 				       &plain_text, (unsigned char*)msg.message);
 
       if (!success) {
-	printf("Received a message with a Bad MAC\n\n");
+#ifdef SEC_DEBUG
+	printf("SEC_DEBUG: Received a message with a Bad MAC\n\n");
+#endif
+      } else {
+	strcpy(chat.message, plain_text);
+	strcpy(chat.sender, msg.username);
+	strcpy(chat.roomname, CURRENT_ROOM);
+	listener_function(chat);
+	free(plain_text);
+
+	if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
       }
-      strcpy(chat.message, plain_text);
-      strcpy(chat.sender, msg.username);
-      strcpy(chat.roomname, CURRENT_ROOM);
-      listener_function(chat);
-      free(plain_text);
-
-      if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
-
      
       // HANDLE A HEAD MESSAGE //
     } else if (msg.type == HEAD) {
       strcpy(CURRENT_HEAD_IP, msg.message);
+#ifdef DEBUG: 
       printf("Setting new head IP: %s\n", CURRENT_HEAD_IP);
+#endif
       if (*forward_socket) tatl_send_protocol(*forward_socket, &msg);
     }
 
-  }
-  
+  } 
 }
 
-
 void tatl_spawn_chat_listener (int* socket, pthread_t* thread) {
-  printf("Spawning chat listener with socket: %d", *socket);
+#ifdef DEBUG 
+  printf("DEBUG: Spawning chat listener with socket: %d\n", *socket);
+#endif
   pthread_create(thread, NULL, tatl_chat_listener, socket); 
 }
 
 void tatl_join_chat_listener (pthread_t* thread) {
+#ifdef DEBUG 
+  printf("DEBUG: Joining chat listener\n");
+#endif
   pthread_join(*thread, NULL);
 }
 
@@ -672,7 +639,9 @@ int tatl_join_room (const char* roomname, const char* username, char* members) {
   if (*(msg.message)) {
     alone = 0;
 
-    printf("Room has someone in it. msg.message is: %s\n", msg.message);
+#ifdef DEBUG
+    printf("DEBUG: Room is not empty! Members are: %s\n", msg.message);
+#endif
     char *member, *member_ip;
     member = strtok(msg.message, ":");
     member_ip = strtok(NULL, ":");
